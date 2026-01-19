@@ -531,6 +531,7 @@ $(patsubst %.c,$(BUILD)/%.o,$(SRC_SDK) $(SRC_CYW43)): CFLAGS += -Wno-missing-pro
 SRC_C += \
 	boards/$(BOARD)/board.c \
 	boards/$(BOARD)/pins.c \
+	bindings/bittino/__init__.c \
 	peripherals/pins.c \
 	background.c \
 	lib/crypto-algorithms/sha256.c \
