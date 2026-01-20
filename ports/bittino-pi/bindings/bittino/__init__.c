@@ -9,7 +9,7 @@
 busio_uart_obj_t bittino_uart;
 uint8_t bittino_uart_rx_buf[64];
 
-digitalio_digitalinout_obj_t bittino_de_pin;
+digitalio_digitalinout_obj_t bittino_scs_pin;
 
 #define MODBUS_FN_WRITE_SINGLE_REGISTER     6
 
@@ -51,8 +51,8 @@ static uint8_t bittino_write_single_register(uint8_t unit_id, uint16_t address, 
 
 
 static mp_obj_t bittino_init(void) {
-    // common_hal_digitalio_digitalinout_construct(&bittino_de_pin, &pin_GPIO3);
-    // common_hal_digitalio_digitalinout_switch_to_output(&bittino_de_pin, false, DRIVE_MODE_PUSH_PULL);
+    common_hal_digitalio_digitalinout_construct(&bittino_scs_pin, &pin_GPIO6);
+    common_hal_digitalio_digitalinout_switch_to_output(&bittino_scs_pin, true, DRIVE_MODE_PUSH_PULL);
     common_hal_busio_uart_construct(&bittino_uart, &pin_GPIO4, &pin_GPIO5, NULL, NULL, &pin_GPIO3,
         false, 921600, 8, BUSIO_UART_PARITY_NONE, 1, 1.0f, sizeof(bittino_uart_rx_buf),
         bittino_uart_rx_buf, true);
