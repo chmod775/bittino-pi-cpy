@@ -134,7 +134,6 @@ static mp_obj_t bittino_init(void) {
     // NANOMODBUS Init
     nmbs_platform_conf platform_conf;
     nmbs_platform_conf_create(&platform_conf);
-    platform_conf.transport = NMBS_TRANSPORT_RTU;
     platform_conf.read = read_serial;
     platform_conf.write = write_serial;
     nmbs_error err = nmbs_client_create(&nmbs, &platform_conf);
@@ -162,8 +161,8 @@ static MP_DEFINE_CONST_FUN_OBJ_1(bittino_sleep_us_obj, bittino_sleep_us);
 static mp_obj_t bittino_set(mp_obj_t new_address) {
     mp_int_t new_address_int = mp_obj_get_int(new_address);
 
-    nmbs_set_destination_rtu_address(&nmbs, 200);
-    nmbs_error err = nmbs_write_single_register(&nmbs, 0, new_address_int);
+    nmbs_set_destination_rtu_address(&nmbs, 63);
+    nmbs_error err = nmbs_write_multiple_registers(&nmbs, 0, 1, (const uint16_t*)&new_address_int);
     if (err != NMBS_ERROR_NONE) {
         bittino_onError(err);
     }
@@ -178,7 +177,7 @@ static mp_obj_t bittino_send(mp_obj_t address, mp_obj_t value) {
     mp_int_t value_int = mp_obj_get_int(value);
 
     nmbs_set_destination_rtu_address(&nmbs, address_int);
-    nmbs_error err = nmbs_write_single_register(&nmbs, 100, value_int);
+    nmbs_error err = nmbs_write_multiple_registers(&nmbs, 100, 1, (const uint16_t*)&value_int);
     if (err != NMBS_ERROR_NONE) {
         bittino_onError(err);
     }
