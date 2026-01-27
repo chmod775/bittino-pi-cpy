@@ -128,7 +128,7 @@ static mp_obj_t bittino_init(void) {
 
     // UART Init
     common_hal_busio_uart_construct(&bittino_uart, &pin_GPIO4, &pin_GPIO5, NULL, NULL, &pin_GPIO3,
-        false, 921600, 8, BUSIO_UART_PARITY_NONE, 1, 0.01f, sizeof(bittino_uart_rx_buf),
+        false, 921600 * 2, 8, BUSIO_UART_PARITY_NONE, 1, 0.01f, sizeof(bittino_uart_rx_buf),
         bittino_uart_rx_buf, true);
 
     // NANOMODBUS Init
@@ -197,6 +197,42 @@ static mp_obj_t bittino_send(mp_obj_t address, mp_obj_t value) {
 static MP_DEFINE_CONST_FUN_OBJ_2(bittino_send_obj, bittino_send);
 
 
+static mp_obj_t bittino_realtime(mp_obj_t address, mp_obj_t value) {
+    mp_int_t address_int = mp_obj_get_int(address);
+    mp_int_t value_int = mp_obj_get_int(value);
+
+    nmbs_set_destination_rtu_address(&nmbs, address_int);
+
+    uint8_t realtime_in[16];
+    uint8_t realtime_out[16];
+
+    memset(realtime_in, 0, sizeof(realtime_in));
+    realtime_in[0] = value_int;
+
+    nmbs_error err = nmbs_realtime(&nmbs, 1, realtime_in, realtime_out);
+    if (err != NMBS_ERROR_NONE) {
+        bittino_onError(err);
+    }
+
+    // for (int i = 0; i < 16; i++) {
+    //     printf("OUT[%d]: %d\n", i, realtime_out[i]);
+    // }
+
+    // int uart_errcode;
+
+    // const uint8_t len = bittino_write_single_register(address_int, 100, value_int);
+    // common_hal_busio_uart_write(&bittino_uart, (const uint8_t *)bittino_uart_rx_buf, len, &uart_errcode);
+
+    // uint8_t rx_data[64];
+    // common_hal_busio_uart_read(&bittino_uart, rx_data, 8, &uart_errcode);
+
+    // common_hal_mcu_delay_us(200);
+
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(bittino_realtime_obj, bittino_realtime);
+
+
 static const mp_rom_map_elem_t bittino_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_bittino) },
 
@@ -204,6 +240,7 @@ static const mp_rom_map_elem_t bittino_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_sleep_us),  MP_ROM_PTR(&bittino_sleep_us_obj) },
     { MP_ROM_QSTR(MP_QSTR_set),  MP_ROM_PTR(&bittino_set_obj) },
     { MP_ROM_QSTR(MP_QSTR_send),  MP_ROM_PTR(&bittino_send_obj) },
+    { MP_ROM_QSTR(MP_QSTR_realtime),  MP_ROM_PTR(&bittino_realtime_obj) },
     // { MP_ROM_QSTR(MP_QSTR_heap_caps_get_total_size), MP_ROM_PTR(&bittino_heap_caps_get_total_size_obj)},
 };
 

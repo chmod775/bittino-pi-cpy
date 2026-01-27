@@ -435,6 +435,64 @@ nmbs_error nmbs_client_create(nmbs_t* nmbs, const nmbs_platform_conf* platform_c
     return nmbs_create(nmbs, platform_conf);
 }
 
+static nmbs_error recv_read_realtime(nmbs_t* nmbs, uint16_t quantity, uint8_t* registers_out) {
+    nmbs_error err = recv_res_header(nmbs);
+    if (err != NMBS_ERROR_NONE)
+        return err;
+
+    const uint8_t registers_bytes = quantity;
+    NMBS_DEBUG_PRINT("b %d\t", registers_bytes);
+
+    if (registers_bytes > 250)
+        return NMBS_ERROR_INVALID_RESPONSE;
+
+    err = recv(nmbs, registers_bytes);
+    if (err != NMBS_ERROR_NONE)
+        return err;
+
+    NMBS_DEBUG_PRINT("regs ");
+    for (int i = 0; i < quantity; i++) {
+        uint8_t reg = get_1(nmbs);
+        if (registers_out)
+            registers_out[i] = reg;
+        NMBS_DEBUG_PRINT("%d ", reg);
+    }
+
+    err = recv_msg_footer(nmbs);
+    if (err != NMBS_ERROR_NONE)
+        return err;
+
+    return NMBS_ERROR_NONE;
+}
+
+nmbs_error nmbs_realtime(nmbs_t* nmbs, uint16_t quantity, uint8_t* registers_in, uint8_t* registers_out) {
+    if (quantity < 1 || quantity > 0x007B)
+        return NMBS_ERROR_INVALID_ARGUMENT;
+
+    const uint8_t registers_bytes = quantity;
+
+    msg_state_req(nmbs, MODBUS_FUNC_REALTIME);
+    put_req_header(nmbs, registers_bytes);
+
+    // put_1(nmbs, registers_bytes);
+    NMBS_DEBUG_PRINT("q %d\tb %d\t", quantity, registers_bytes);
+
+    NMBS_DEBUG_PRINT("regs ");
+    for (int i = 0; i < quantity; i++) {
+        put_1(nmbs, registers_in[i]);
+        NMBS_DEBUG_PRINT("%d ", registers_in[i]);
+    }
+
+    const nmbs_error err = send_msg(nmbs);
+    if (err != NMBS_ERROR_NONE)
+        return err;
+
+    if (!nmbs->msg.broadcast)
+        return recv_read_realtime(nmbs, quantity, registers_out);
+
+    return NMBS_ERROR_NONE;
+}
+
 
 static nmbs_error read_registers(nmbs_t* nmbs, uint8_t fc, uint16_t address, uint16_t quantity, uint16_t* registers) {
     if (quantity < 1 || quantity > 125)

@@ -240,6 +240,17 @@ nmbs_error nmbs_client_create(nmbs_t* nmbs, const nmbs_platform_conf* platform_c
  */
 void nmbs_set_destination_rtu_address(nmbs_t* nmbs, uint8_t address);
 
+/** Send a FC 16 (0x10) Write Multiple Registers
+ * @param nmbs pointer to the nmbs_t instance
+ * @param address starting address
+ * @param quantity quantity of registers
+ * @param registers array of registers values
+ *
+ * @return NMBS_ERROR_NONE if successful, other errors otherwise.
+ */
+nmbs_error nmbs_realtime(nmbs_t* nmbs, uint16_t quantity, uint8_t* registers_in, uint8_t* registers_out);
+
+
 /** Send a FC 03 (0x03) Read Holding Registers request
  * @param nmbs pointer to the nmbs_t instance
  * @param address starting address
