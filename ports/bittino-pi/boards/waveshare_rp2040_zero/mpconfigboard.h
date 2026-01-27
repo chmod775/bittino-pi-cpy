@@ -15,3 +15,6 @@
 // #define DEFAULT_UART_BUS_RX (&pin_GPIO1)
 
 // #define MICROPY_HW_NEOPIXEL (&pin_GPIO16)
+
+#define CIRCUITPY_CONSOLE_UART_TX (&pin_GPIO0)
+#define CIRCUITPY_CONSOLE_UART_RX (&pin_GPIO1)

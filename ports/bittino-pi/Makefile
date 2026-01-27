@@ -91,6 +91,7 @@ INC += \
 	-Ilwip_inc \
 	-I../.. \
 	-I../lib/mp-readline \
+	-isystem lib/nanomodbus \
 	-I../shared/timeutils \
 	-Iboards/$(BOARD) \
 	-Iboards/ \
@@ -537,6 +538,7 @@ SRC_C += \
 	lib/crypto-algorithms/sha256.c \
 	lib/tinyusb/src/portable/raspberrypi/rp2040/dcd_rp2040.c \
 	lib/tinyusb/src/portable/raspberrypi/rp2040/rp2040_usb.c \
+	lib/nanomodbus/nanomodbus.c \
 	mphalport.c \
 	$(SRC_CYW43) \
 	$(SRC_LWIP) \
