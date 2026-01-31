@@ -6,8 +6,8 @@
 uint8_t mtbus_buf_rx[128];
 uint8_t mtbus_buf_tx[128];
 
-uint8_t mtbus_regs_in[MTBUS_REGS_COUNT];
-uint8_t mtbus_regs_out[MTBUS_REGS_COUNT];
+// uint8_t mtbus_regs_in[MTBUS_REGS_COUNT];
+// uint8_t mtbus_regs_out[MTBUS_REGS_COUNT];
 
 static void mtbus_error(const char* message) {
   printf("MTBUS Error: %s\n", message);
@@ -90,9 +90,11 @@ static void mtbus_footer(mtbus_packet_t *packet, bool tx, uint8_t **buf) {
 }
 
 static void mtbus_slave_realtime(uint8_t **bufrx, uint8_t **buftx) {
-  for (uint8_t i = 0; i < MTBUS_REGS_COUNT; i++) {
+  for (uint8_t i = 0; i < MTBUS_REALTIMES_IN_COUNT; i++) {
     mtbus_receive(*bufrx, 1);
     mtbus_regs_in[i] = mtbus_get8(bufrx);
+  }
+  for (uint8_t i = 0; i < MTBUS_REALTIMES_OUT_COUNT; i++) {
     mtbus_put8(buftx, mtbus_regs_out[i]);
   }
 }
@@ -141,7 +143,7 @@ void mtbus_slave_process(uint8_t slave_id) {
   if (err_send < 0) return mtbus_error("mtbus_send error.");
 }
 
-void mtbus_master_realtime(uint8_t slave_id) {
+void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t realtimes_out_count, uint8_t *realtimes_in, uint8_t *realtimes_out) {
   // Send
   uint8_t *buftx_ptr = mtbus_buf_tx;
   mtbus_packet_t packet_tx;
@@ -150,8 +152,8 @@ void mtbus_master_realtime(uint8_t slave_id) {
   packet_tx.subfunc = 0;
   mtbus_header(&packet_tx, true, &buftx_ptr);
 
-  for (uint8_t i = 0; i < MTBUS_REGS_COUNT; i++) {
-    mtbus_put8(&buftx_ptr, mtbus_regs_in[i]);
+  for (uint8_t i = 0; i < realtimes_in_count; i++) {
+    mtbus_put8(&buftx_ptr, realtimes_in[i]);
   }
 
   packet_tx.crc = mtbus_calc_crc(mtbus_buf_tx, buftx_ptr - mtbus_buf_tx);
@@ -170,9 +172,9 @@ void mtbus_master_realtime(uint8_t slave_id) {
   if (packet_tx.id != packet_rx.id) return mtbus_error("Slave ID RX not matching.");
   if (packet_tx.func != packet_rx.func) return mtbus_error("Slave FUNC RX not matching.");
 
-  for (uint8_t i = 0; i < MTBUS_REGS_COUNT; i++) {
+  for (uint8_t i = 0; i < realtimes_out_count; i++) {
     mtbus_receive(bufrx_ptr, 1);
-    mtbus_regs_out[i] = mtbus_get8(&bufrx_ptr);
+    realtimes_out[i] = mtbus_get8(&bufrx_ptr);
   }
 
   uint8_t rx_calc_crc = mtbus_calc_crc(mtbus_buf_rx, bufrx_ptr - mtbus_buf_rx);

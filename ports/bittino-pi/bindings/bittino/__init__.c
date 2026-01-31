@@ -3,6 +3,7 @@
 #include "py/obj.h"
 #include "py/runtime.h"
 #include "py/mphal.h"
+#include "py/gc.h"
 
 #include "bindings/bittino/__init__.h"
 #include "shared-bindings/busio/UART.h"
@@ -12,108 +13,14 @@
 #include "lib/nanomodbus/nanomodbus.h"
 #include "hardware/irq.h"
 
+#include "Bittino.h"
+#include "bits/BIT_Generic.h"
+
 busio_uart_obj_t bittino_uart;
 uint8_t bittino_uart_rx_buf[64];
 
 digitalio_digitalinout_obj_t bittino_led_red;
-
 digitalio_digitalinout_obj_t bittino_scs_pin;
-
-// nmbs_t nmbs;
-
-#define MODBUS_FN_WRITE_SINGLE_REGISTER     6
-
-/*
-static void modbus_put_2(uint8_t* buffer, uint8_t offset, uint16_t data) {
-    buffer[offset] = (uint8_t) ((data >> 8) & 0xFFU);
-    buffer[offset + 1] = (uint8_t) data;
-}
-
-static uint16_t modbus_crc_calc(const uint8_t* data, uint32_t length) {
-    uint16_t crc = 0xFFFF;
-    for (uint32_t i = 0; i < length; i++) {
-        crc ^= (uint16_t) data[i];
-        for (int j = 8; j != 0; j--) {
-            if ((crc & 0x0001) != 0) {
-                crc >>= 1;
-                crc ^= 0xA001;
-            }
-            else
-                crc >>= 1;
-        }
-    }
-
-    return (uint16_t) (crc << 8) | (uint16_t) (crc >> 8);
-}
-
-static uint8_t bittino_write_single_register(uint8_t unit_id, uint16_t address, uint16_t value) {
-    memset(bittino_uart_rx_buf, 0, sizeof(bittino_uart_rx_buf));
-
-    bittino_uart_rx_buf[0] = unit_id;
-    bittino_uart_rx_buf[1] = MODBUS_FN_WRITE_SINGLE_REGISTER;
-    modbus_put_2(bittino_uart_rx_buf, 2, address);
-    modbus_put_2(bittino_uart_rx_buf, 4, value);
-
-    const uint16_t crc = modbus_crc_calc(bittino_uart_rx_buf, 6);
-    modbus_put_2(bittino_uart_rx_buf, 6, crc);
-
-    return 8;
-}
-*/
-
-void bittino_onError(nmbs_error err);
-int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
-int32_t write_serial(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg);
-
-int32_t read_serial(uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
-    int uart_errcode;
-
-    if (count == 260) {
-        common_hal_busio_uart_clear_rx_buffer(&bittino_uart);
-        // printf("Cleared buffer\n");
-        return count;
-    }
-
-    size_t bytes_read = common_hal_busio_uart_read(&bittino_uart, buf, count, &uart_errcode);
-
-    // printf("read_serial [%d, %d]: ", count, bytes_read);
-    // if (bytes_read > 0) {
-    //     for (size_t i = 0; i < bytes_read; i++) {
-    //         printf("%02X ", buf[i]);
-    //     }
-    // }
-    // printf("\n");
-
-    return bytes_read;
-
-    // busio_uart_obj_t *self = &bittino_uart;
-
-    // // Prevent conflict with uart irq.
-    // irq_set_enabled(self->uart_irq_id, false);
-
-    // uint64_t start_time = time_us_64();
-    // int32_t bytes_read = 0;
-    // uint64_t timeout_us = (uint64_t) byte_timeout_ms * 1000;
-
-    // while (time_us_64() - start_time < timeout_us && bytes_read < count) {
-    //     if (uart_is_readable(self->uart)) {
-    //         buf[bytes_read++] = uart_getc(self->uart);
-    //         start_time = time_us_64();    // Reset start time after a successful read
-    //     }
-    // }
-
-    // // Re-enable irq.
-    // irq_set_enabled(self->uart_irq_id, true);
-
-    // return bytes_read;
-}
-
-int32_t write_serial(const uint8_t* buf, uint16_t count, int32_t byte_timeout_ms, void* arg) {
-    int uart_errcode;
-    common_hal_busio_uart_write(&bittino_uart, (const uint8_t *)buf, count, &uart_errcode);
-    return count;
-}
-
 
 int mtbus_send(uint8_t *buf, uint8_t size) {
     int uart_errcode;
@@ -131,18 +38,86 @@ int mtbus_flush(void) {
 }
 
 
-void bittino_onError(nmbs_error err) {
-    mp_raise_ValueError_varg(MP_ERROR_TEXT("Nanomodbus error: %d"), err);
+static size_t g_bits_len = 0;
+static bittino_bit_generic_obj_t* g_bits[32];
+
+MP_REGISTER_ROOT_POINTER(mp_obj_t g_bits_owner);
+
+static bittino_bit_generic_obj_t *native_bit_generic(mp_obj_t obj) {
+    mp_obj_t native = mp_obj_cast_to_native_base(obj, MP_OBJ_FROM_PTR(&bittino_BIT_Generic_type));
+    if (native == MP_OBJ_NULL) {
+        mp_raise_TypeError(MP_ERROR_TEXT("expected BIT_Generic (or subclass)"));
+    }
+    return MP_OBJ_TO_PTR(native);
 }
 
-static uint8_t test_counter = 0;
+static mp_obj_t bittino_configure(mp_obj_t seq_in) {
+    if (!mp_obj_is_type(seq_in, &mp_type_list) && !mp_obj_is_type(seq_in, &mp_type_tuple)) {
+        mp_raise_TypeError(MP_ERROR_TEXT("expected list/tuple of BIT_Generic"));
+    }
+
+    // Freeze input as tuple
+    size_t n;
+    mp_obj_t *items;
+    mp_obj_get_array(seq_in, &n, &items);
+    mp_obj_t owner_tuple = mp_obj_new_tuple(n, items);
+
+    // rebuild fast pointer array
+    // if (g_bits) {
+    //     m_del(bittino_bit_generic_obj_t*, g_bits, g_bits_len);
+    //     g_bits = NULL;
+    //     g_bits_len = 0;
+    // }
+
+    mp_obj_get_array(owner_tuple, &n, &items); // get tuple items
+
+    if (n > MP_ARRAY_SIZE(g_bits)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("max 32 bits"));
+    }
+
+    for (size_t i = 0; i < MP_ARRAY_SIZE(g_bits); i++) {
+        g_bits[i] = NULL;
+    }
+    g_bits_len = 0;
+
+    // g_bits = m_new(bittino_bit_generic_obj_t*, n);
+    for (size_t i = 0; i < n; i++) {
+        g_bits[i] = native_bit_generic(items[i]); // accepts subclasses
+        g_bits[i]->id = i + 1;
+        printf("#%d config item:\n", i);
+        printf("\tid: %d\n", g_bits[i]->id);
+        printf("\tins: %d\n", g_bits[i]->realtimes.count_relatime_in);
+        printf("\touts: %d\n", g_bits[i]->realtimes.count_relatime_out);
+    }
+    g_bits_len = n;
+
+    // Root Python refs so GC keeps them alive
+    MP_STATE_VM(g_bits_owner) = owner_tuple;
+
+    return mp_const_none;
+}
+MP_DEFINE_CONST_FUN_OBJ_1(bittino_configure_obj, bittino_configure);
+
+
+
+static bool toggle_led = false;
 
 static repeating_timer_t t;
-static bool toggle_led = false;
-static bool cb(repeating_timer_t *rt) {
-    mtbus_regs_in[0] = test_counter;
-    mtbus_master_realtime(10);
-    test_counter++;
+static bool bittino_comm_frame(repeating_timer_t *rt) {
+    for (size_t i = 0; i < g_bits_len; i++) {
+        bittino_bit_generic_obj_t *g = g_bits[i];
+
+        // printf("bittino_comm_frame: id: %d, ins: %d, outs: %d\n", g->id, g->realtimes.count_relatime_in, g->realtimes.count_relatime_out);
+        if (g->id > 0) {
+            mtbus_master_realtime(
+                g->id,
+                g->realtimes.count_relatime_in,
+                g->realtimes.count_relatime_out,
+                (uint8_t *)g->realtimes.relatime_in,
+                (uint8_t *)g->realtimes.relatime_out
+            );
+        }
+    }
 
     common_hal_digitalio_digitalinout_set_value(&bittino_led_red, toggle_led);
     toggle_led = !toggle_led;
@@ -151,12 +126,40 @@ static bool cb(repeating_timer_t *rt) {
 
 static mp_obj_t bittino_start(void) {
     alarm_pool_init_default();
-    alarm_pool_add_repeating_timer_ms(alarm_pool_get_default(), 10, cb, NULL, &t);
+    alarm_pool_add_repeating_timer_ms(alarm_pool_get_default(), 10, bittino_comm_frame, NULL, &t);
 
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(bittino_start_obj, bittino_start);
 
+static mp_obj_t bittino_stop(void) {
+    cancel_repeating_timer(&t);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(bittino_stop_obj, bittino_stop);
+
+static mp_obj_t bittino_write(mp_obj_t id, mp_obj_t seq_in) {
+    mp_int_t id_int = mp_obj_get_int(id);
+    if (id_int < 0 || (size_t)id_int >= g_bits_len || g_bits[id_int] == NULL) {
+        mp_raise_ValueError(MP_ERROR_TEXT("bad id / not configured"));
+    }
+
+    if (!mp_obj_is_type(seq_in, &mp_type_list) && !mp_obj_is_type(seq_in, &mp_type_tuple)) {
+        mp_raise_TypeError(MP_ERROR_TEXT("expected list/tuple"));
+    }
+
+    size_t n;
+    mp_obj_t *items;
+    mp_obj_get_array(seq_in, &n, &items);
+
+    for (size_t i = 0; i < n; i++) {
+        uint8_t value = mp_obj_get_int(items[i]);
+        g_bits[id_int]->realtimes.relatime_in[i] = value;
+    }
+
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(bittino_write_obj, bittino_write);
 
 static mp_obj_t bittino_init(void) {
     // SCS Pin
@@ -176,7 +179,6 @@ static mp_obj_t bittino_init(void) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(bittino_init_obj, bittino_init);
-
 
 
 static mp_obj_t bittino_sleep_us(mp_obj_t amount) {
@@ -209,33 +211,45 @@ static mp_obj_t bittino_send(mp_obj_t id, mp_obj_t address, mp_obj_t value) {
 static MP_DEFINE_CONST_FUN_OBJ_3(bittino_send_obj, bittino_send);
 
 
-static mp_obj_t bittino_realtime(mp_obj_t address, mp_obj_t value) {
-    mp_int_t address_int = mp_obj_get_int(address);
-    mp_int_t value_int = mp_obj_get_int(value);
+// static mp_obj_t bittino_realtime(mp_obj_t address, mp_obj_t count_in, mp_obj_t count_out) {
+//     mp_int_t address_int = mp_obj_get_int(address);
 
-    memset(mtbus_regs_in, 0, sizeof(mtbus_regs_in));
-    mtbus_regs_in[0] = value_int;
+//     mp_int_t value_int = mp_obj_get_int(value);
 
-    mtbus_master_realtime(address_int);
+//     memset(mtbus_regs_in, 0, sizeof(mtbus_regs_in));
+//     mtbus_regs_in[0] = value_int;
 
-    for (int i = 0; i < MTBUS_REGS_COUNT; i++) {
-        printf("OUT[%d]: %d\n", i, mtbus_regs_out[i]);
-    }
+//     mtbus_master_realtime(address_int, 1, 1, );
 
-    return mp_const_none;
-}
-static MP_DEFINE_CONST_FUN_OBJ_2(bittino_realtime_obj, bittino_realtime);
+//     for (int i = 0; i < MTBUS_REGS_COUNT; i++) {
+//         printf("OUT[%d]: %d\n", i, mtbus_regs_out[i]);
+//     }
+
+//     return mp_const_none;
+// }
+// static MP_DEFINE_CONST_FUN_OBJ_2(bittino_realtime_obj, bittino_realtime);
+
+
 
 
 static const mp_rom_map_elem_t bittino_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_bittino) },
 
+    { MP_ROM_QSTR(MP_QSTR_BIT_Generic),   MP_ROM_PTR(&bittino_BIT_Generic_type) },
+
+    { MP_ROM_QSTR(MP_QSTR_configure),  MP_ROM_PTR(&bittino_configure_obj) },
     { MP_ROM_QSTR(MP_QSTR_init),  MP_ROM_PTR(&bittino_init_obj) },
+
+    { MP_ROM_QSTR(MP_QSTR_start),  MP_ROM_PTR(&bittino_start_obj) },
+    { MP_ROM_QSTR(MP_QSTR_stop),  MP_ROM_PTR(&bittino_stop_obj) },
+    { MP_ROM_QSTR(MP_QSTR_write),  MP_ROM_PTR(&bittino_write_obj) },
+
     { MP_ROM_QSTR(MP_QSTR_sleep_us),  MP_ROM_PTR(&bittino_sleep_us_obj) },
     { MP_ROM_QSTR(MP_QSTR_set),  MP_ROM_PTR(&bittino_set_obj) },
     { MP_ROM_QSTR(MP_QSTR_send),  MP_ROM_PTR(&bittino_send_obj) },
-    { MP_ROM_QSTR(MP_QSTR_start),  MP_ROM_PTR(&bittino_start_obj) },
-    { MP_ROM_QSTR(MP_QSTR_realtime),  MP_ROM_PTR(&bittino_realtime_obj) },
+
+
+    // { MP_ROM_QSTR(MP_QSTR_realtime),  MP_ROM_PTR(&bittino_realtime_obj) },
     // { MP_ROM_QSTR(MP_QSTR_heap_caps_get_total_size), MP_ROM_PTR(&bittino_heap_caps_get_total_size_obj)},
 };
 

@@ -534,6 +534,8 @@ SRC_C += \
 	boards/$(BOARD)/board.c \
 	boards/$(BOARD)/pins.c \
 	bindings/bittino/__init__.c \
+	bindings/bittino/Bittino.c \
+	bindings/bittino/bits/BIT_Generic.c \
 	peripherals/pins.c \
 	background.c \
 	lib/crypto-algorithms/sha256.c \

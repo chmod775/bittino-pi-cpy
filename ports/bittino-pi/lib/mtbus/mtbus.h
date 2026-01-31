@@ -25,16 +25,17 @@ typedef struct {
 extern uint8_t mtbus_buf_rx[128];
 extern uint8_t mtbus_buf_tx[128];
 
-#define MTBUS_REGS_COUNT  1
-extern uint8_t mtbus_regs_in[MTBUS_REGS_COUNT];
-extern uint8_t mtbus_regs_out[MTBUS_REGS_COUNT];
+#define MTBUS_REALTIMES_IN_COUNT  1
+#define MTBUS_REALTIMES_OUT_COUNT  1
+extern uint8_t mtbus_regs_in[MTBUS_REALTIMES_IN_COUNT];
+extern uint8_t mtbus_regs_out[MTBUS_REALTIMES_OUT_COUNT];
 
 extern int mtbus_send(uint8_t *buf, uint8_t size);
 extern int mtbus_receive(uint8_t *buf, uint8_t size);
 extern int mtbus_flush(void);
 
 void mtbus_slave_process(uint8_t slave_id);
-void mtbus_master_realtime(uint8_t slave_id);
+void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t realtimes_out_count, uint8_t *realtimes_in, uint8_t *realtimes_out);
 void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint16_t count, uint8_t *registers);
 
 #endif
