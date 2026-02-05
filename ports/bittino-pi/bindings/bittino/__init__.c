@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "py/obj.h"
+#include "py/objtype.h"
 #include "py/runtime.h"
 #include "py/mphal.h"
 #include "py/gc.h"
@@ -15,6 +16,7 @@
 
 #include "Bittino.h"
 #include "bits/BIT_Generic.h"
+#include "bits/BIT_IO/BIT_IO.h"
 
 busio_uart_obj_t bittino_uart;
 uint8_t bittino_uart_rx_buf[64];
@@ -43,12 +45,46 @@ static bittino_bit_generic_obj_t* g_bits[32];
 
 MP_REGISTER_ROOT_POINTER(mp_obj_t g_bits_owner);
 
+static mp_obj_t bittino_cast_to_native_base(mp_obj_t obj, const mp_obj_type_t *native_type) {
+    const mp_obj_type_t *t = mp_obj_get_type(obj);
+
+    // Exact type match: already native base
+    if (t == native_type) {
+        return obj;
+    }
+
+    // Not a subclass => fail
+    if (!mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(t), MP_OBJ_FROM_PTR(native_type))) {
+        return MP_OBJ_NULL;
+    }
+
+    // If it's a native object (including native C subclass), the object pointer
+    // is the native storage. DO NOT treat it as mp_obj_instance_t.
+    if (mp_obj_is_native_type(t)) {
+        return obj;
+    }
+
+    // Otherwise it should be a Python instance that wraps native base(s)
+    if (!mp_obj_is_instance_type(t)) {
+        return MP_OBJ_NULL;
+    }
+
+    mp_obj_instance_t *inst = MP_OBJ_TO_PTR(obj);
+    mp_obj_t native = inst->subobj[0];
+
+    // Optional but recommended: ensure native part was inited
+    mp_obj_assert_native_inited(native);
+
+    return native;
+}
+
 static bittino_bit_generic_obj_t *native_bit_generic(mp_obj_t obj) {
-    mp_obj_t native = mp_obj_cast_to_native_base(obj, MP_OBJ_FROM_PTR(&bittino_BIT_Generic_type));
+    mp_obj_t native = mp_obj_cast_to_native_base(obj, &bittino_BIT_Generic_type);
     if (native == MP_OBJ_NULL) {
         mp_raise_TypeError(MP_ERROR_TEXT("expected BIT_Generic (or subclass)"));
     }
-    return MP_OBJ_TO_PTR(native);
+    // mp_obj_assert_native_inited(native);
+    return MP_OBJ_TO_PTR(obj);
 }
 
 static mp_obj_t bittino_configure(mp_obj_t seq_in) {
@@ -85,6 +121,7 @@ static mp_obj_t bittino_configure(mp_obj_t seq_in) {
         g_bits[i] = native_bit_generic(items[i]); // accepts subclasses
         g_bits[i]->id = i + 1;
         printf("#%d config item:\n", i);
+        printf("\tptr: %p\n", g_bits[i]);
         printf("\tid: %d\n", g_bits[i]->id);
         printf("\tins: %d\n", g_bits[i]->realtimes.count_relatime_in);
         printf("\touts: %d\n", g_bits[i]->realtimes.count_relatime_out);
@@ -116,6 +153,8 @@ static bool bittino_comm_frame(repeating_timer_t *rt) {
                 (uint8_t *)g->realtimes.relatime_in,
                 (uint8_t *)g->realtimes.relatime_out
             );
+
+            busy_wait_us(50);
         }
     }
 
@@ -236,6 +275,7 @@ static const mp_rom_map_elem_t bittino_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_bittino) },
 
     { MP_ROM_QSTR(MP_QSTR_BIT_Generic),   MP_ROM_PTR(&bittino_BIT_Generic_type) },
+    { MP_ROM_QSTR(MP_QSTR_BIT_IO),   MP_ROM_PTR(&bittino_BIT_IO_type) },
 
     { MP_ROM_QSTR(MP_QSTR_configure),  MP_ROM_PTR(&bittino_configure_obj) },
     { MP_ROM_QSTR(MP_QSTR_init),  MP_ROM_PTR(&bittino_init_obj) },
