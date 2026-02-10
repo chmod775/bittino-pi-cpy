@@ -10,9 +10,11 @@
 #pragma once
 
 #include "py/obj.h"
+#include "../bindings/bittino/bits/BIT_Generic.h"
 
 typedef struct {
     mp_obj_base_t base;
+    bittino_bit_generic_obj_t *bit;
     uint8_t number;
 } mcu_pin_obj_t;
 

@@ -8,20 +8,9 @@
 
 void _bittino_BIT_Generic_init_from_args(
     bittino_bit_generic_obj_t *self,
-    size_t n_args, size_t n_kw,
-    const mp_obj_t *all_args
+    mp_int_t in_count,
+    mp_int_t out_count
 ) {
-    enum { ARG_in_count, ARG_out_count };
-    static const mp_arg_t allowed_args[] = {
-        { MP_QSTR_in_count, MP_ARG_INT | MP_ARG_REQUIRED | MP_ARG_KW_ONLY },
-        { MP_QSTR_out_count, MP_ARG_INT | MP_ARG_REQUIRED | MP_ARG_KW_ONLY },
-    };
-    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
-    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
-
-    mp_int_t in_count = mp_arg_validate_int_min(args[ARG_in_count].u_int, 1, MP_QSTR_in_count);
-    mp_int_t out_count = mp_arg_validate_int_min(args[ARG_out_count].u_int, 1, MP_QSTR_out_count);
-
     printf("\tptr - _bittino_BIT_Generic_init_from_args: %p\n", self);
     printf("ins: %d, outs: %d\n", in_count, out_count);
 
@@ -36,8 +25,20 @@ void _bittino_BIT_Generic_init_from_args(
 
 static mp_obj_t bittino_BIT_Generic_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
     bittino_bit_generic_obj_t *self = mp_obj_malloc(bittino_bit_generic_obj_t, &bittino_BIT_Generic_type);
+
+    enum { ARG_in_count, ARG_out_count };
+    static const mp_arg_t allowed_args[] = {
+        { MP_QSTR_in_count, MP_ARG_INT | MP_ARG_REQUIRED | MP_ARG_KW_ONLY },
+        { MP_QSTR_out_count, MP_ARG_INT | MP_ARG_REQUIRED | MP_ARG_KW_ONLY },
+    };
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    mp_int_t in_count = mp_arg_validate_int_min(args[ARG_in_count].u_int, 1, MP_QSTR_in_count);
+    mp_int_t out_count = mp_arg_validate_int_min(args[ARG_out_count].u_int, 1, MP_QSTR_out_count);
+
     printf("\tptr - bittino_BIT_Generic_make_new: %p\n", self);
-    _bittino_BIT_Generic_init_from_args(self, n_args, n_kw, all_args);
+    _bittino_BIT_Generic_init_from_args(self, in_count, out_count);
     return MP_OBJ_FROM_PTR(self);
 }
 

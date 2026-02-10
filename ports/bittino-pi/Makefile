@@ -537,6 +537,7 @@ SRC_C += \
 	bindings/bittino/Bittino.c \
 	bindings/bittino/bits/BIT_Generic.c \
 	bindings/bittino/bits/BIT_IO/BIT_IO.c \
+	bindings/bittino/bits/BIT_COM/BIT_COM.c \
 	peripherals/pins.c \
 	background.c \
 	lib/crypto-algorithms/sha256.c \

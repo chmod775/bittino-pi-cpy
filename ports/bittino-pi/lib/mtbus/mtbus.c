@@ -222,10 +222,15 @@ void mtbus_slave_process(void) {
       mtbus_slave_realtime(&bufrx_ptr, &buftx_ptr);
       break;
     case MTBUS_FUNC_SUBFUNC:
-
-      break;
-    case MTBUS_FUNC_W_MUTI_REGS:
-      mtbus_slave_write_multi(&bufrx_ptr, &buftx_ptr);
+      switch (packet_rx.subfunc)
+      {
+      case MTBUS_SUBFUNC_W_MULTI_REGS:
+        mtbus_slave_write_multi(&bufrx_ptr, &buftx_ptr);
+        break;
+      
+      default:
+        break;
+      }
       break;
     case MTBUS_FUNC_ERROR:
       
@@ -286,8 +291,8 @@ void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t co
   uint8_t *buftx_ptr = mtbus_buf_tx;
   mtbus_packet_t packet_tx;
   packet_tx.id = slave_id;
-  packet_tx.func = MTBUS_FUNC_W_MUTI_REGS;
-  packet_tx.subfunc = 0;
+  packet_tx.func = MTBUS_FUNC_SUBFUNC;
+  packet_tx.subfunc = MTBUS_SUBFUNC_W_MULTI_REGS;
   mtbus_header(&packet_tx, true, &buftx_ptr);
 
   mtbus_put16(&buftx_ptr, address);
@@ -295,6 +300,7 @@ void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t co
 
   for (int i = 0; i < count; i++) {
     mtbus_put8(&buftx_ptr, registers[i]);
+    printf("%d, ", registers[i]);
   }
 
   packet_tx.crc = mtbus_calc_crc(mtbus_buf_tx, buftx_ptr - mtbus_buf_tx);
@@ -313,9 +319,9 @@ void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t co
   if (packet_tx.id != packet_rx.id) return mtbus_error("RX: id not matching.");
   if (packet_tx.func != packet_rx.func) return mtbus_error("RX: func not matching.");
 
-  MTBUS_RECEIVE(bufrx_ptr, 4);
+  MTBUS_RECEIVE(bufrx_ptr, 3);
   uint16_t rx_address = mtbus_get16(&bufrx_ptr);
-  uint16_t rx_count = mtbus_get8(&bufrx_ptr);
+  uint8_t rx_count = mtbus_get8(&bufrx_ptr);
 
   if (address != rx_address) return mtbus_error("RX: rx_address not matching.");
   if (count != rx_count) return mtbus_error("RX: count not matching.");

@@ -10,4 +10,3 @@ typedef struct {
 } bittino_bit_io_obj_t;
 
 MP_STATIC_ASSERT(offsetof(bittino_bit_io_obj_t, super) == 0);
-MP_STATIC_ASSERT(offsetof(bittino_bit_generic_obj_t, base) == 0);

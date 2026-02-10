@@ -22,6 +22,7 @@
 #define PIN(p_number) \
     const mcu_pin_obj_t pin_GPIO##p_number = { \
         { &mcu_pin_type }, \
+        .bit = NULL, \
         .number = p_number \
     }
 

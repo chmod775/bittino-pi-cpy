@@ -17,6 +17,7 @@
 #include "Bittino.h"
 #include "bits/BIT_Generic.h"
 #include "bits/BIT_IO/BIT_IO.h"
+#include "bits/BIT_COM/BIT_COM.h"
 
 busio_uart_obj_t bittino_uart;
 uint8_t bittino_uart_rx_buf[64];
@@ -44,7 +45,7 @@ static size_t g_bits_len = 0;
 static bittino_bit_generic_obj_t* g_bits[32];
 
 MP_REGISTER_ROOT_POINTER(mp_obj_t g_bits_owner);
-
+/*
 static mp_obj_t bittino_cast_to_native_base(mp_obj_t obj, const mp_obj_type_t *native_type) {
     const mp_obj_type_t *t = mp_obj_get_type(obj);
 
@@ -77,7 +78,7 @@ static mp_obj_t bittino_cast_to_native_base(mp_obj_t obj, const mp_obj_type_t *n
 
     return native;
 }
-
+*/
 static bittino_bit_generic_obj_t *native_bit_generic(mp_obj_t obj) {
     mp_obj_t native = mp_obj_cast_to_native_base(obj, &bittino_BIT_Generic_type);
     if (native == MP_OBJ_NULL) {
@@ -238,12 +239,24 @@ static mp_obj_t bittino_set(mp_obj_t new_address) {
 static MP_DEFINE_CONST_FUN_OBJ_1(bittino_set_obj, bittino_set);
 
 
-static mp_obj_t bittino_send(mp_obj_t id, mp_obj_t address, mp_obj_t value) {
+static mp_obj_t bittino_send(mp_obj_t id, mp_obj_t address, mp_obj_t seq_in) {
+    if (!mp_obj_is_type(seq_in, &mp_type_list) && !mp_obj_is_type(seq_in, &mp_type_tuple)) {
+        mp_raise_TypeError(MP_ERROR_TEXT("expected list/tuple"));
+    }
+
     mp_int_t id_int = mp_obj_get_int(id);
     mp_int_t address_int = mp_obj_get_int(address);
-    mp_int_t value_int = mp_obj_get_int(value);
 
-    mtbus_master_write_registers(id_int, address_int, 1, (uint8_t*)&value_int);
+    size_t n;
+    mp_obj_t *items;
+    mp_obj_get_array(seq_in, &n, &items);
+
+    uint8_t tmp_value[256];
+    for (size_t i = 0; i < n; i++) {
+        tmp_value[i] = mp_obj_get_int(items[i]);
+    }
+
+    mtbus_master_write_registers(id_int, address_int, n, (uint8_t*)&tmp_value);
 
     return mp_const_none;
 }
@@ -276,6 +289,7 @@ static const mp_rom_map_elem_t bittino_module_globals_table[] = {
 
     { MP_ROM_QSTR(MP_QSTR_BIT_Generic),   MP_ROM_PTR(&bittino_BIT_Generic_type) },
     { MP_ROM_QSTR(MP_QSTR_BIT_IO),   MP_ROM_PTR(&bittino_BIT_IO_type) },
+    { MP_ROM_QSTR(MP_QSTR_BIT_COM),   MP_ROM_PTR(&bittino_BIT_COM_type) },
 
     { MP_ROM_QSTR(MP_QSTR_configure),  MP_ROM_PTR(&bittino_configure_obj) },
     { MP_ROM_QSTR(MP_QSTR_init),  MP_ROM_PTR(&bittino_init_obj) },

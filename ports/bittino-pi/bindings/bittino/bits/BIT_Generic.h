@@ -12,6 +12,8 @@ typedef struct {
 
 void _bittino_BIT_Generic_init_from_args(
     bittino_bit_generic_obj_t *self,
-    size_t n_args, size_t n_kw,
-    const mp_obj_t *all_args
+    mp_int_t in_count,
+    mp_int_t out_count
 );
+
+MP_STATIC_ASSERT(offsetof(bittino_bit_generic_obj_t, base) == 0);

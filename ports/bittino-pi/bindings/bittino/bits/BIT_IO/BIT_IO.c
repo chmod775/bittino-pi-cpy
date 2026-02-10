@@ -11,11 +11,7 @@ static mp_obj_t bittino_BIT_IO_make_new(const mp_obj_type_t *type,
                                 const mp_obj_t *all_args) {
 
     bittino_bit_io_obj_t *self = mp_obj_malloc(bittino_bit_io_obj_t, &bittino_BIT_IO_type);
-
-    _bittino_BIT_Generic_init_from_args(&self->super, n_args, n_kw, all_args);
-    printf("\tptr - bittino_BIT_IO_make_new: %p\n", self);
-    printf("\tins: %d\n", self->super.realtimes.count_relatime_in);
-
+    _bittino_BIT_Generic_init_from_args(&self->super, 1, 1);
     return MP_OBJ_FROM_PTR(self);
 }
 

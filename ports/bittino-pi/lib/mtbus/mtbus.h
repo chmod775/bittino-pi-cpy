@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define MTBUS_AS_SLAVE
+//#define MTBUS_AS_SLAVE
 
 #define MTBUS_BROADCAST_ADDRESS   0
 
@@ -14,8 +14,8 @@
 #define MTBUS_FUNC_NOP        0x80
 #define MTBUS_FUNC_ERROR      0xC0
 
-#define MTBUS_FUNC_R_MUTI_REGS     0x40
-#define MTBUS_FUNC_W_MUTI_REGS     0x80
+#define MTBUS_SUBFUNC_R_MULTI_REGS     0x01
+#define MTBUS_SUBFUNC_W_MULTI_REGS     0x02
 
 typedef uint8_t mtbus_reg_size;
 
