@@ -12,13 +12,12 @@
 #include "py/obj.h"
 
 #include "hardware/i2c.h"
+#include "../../bindings/bittino/bits/BIT_COM/BIT_COM.h"
 
 typedef struct {
     mp_obj_base_t base;
-    i2c_inst_t *peripheral;
-    bitbangio_i2c_obj_t bitbangio_i2c;
     bool has_lock;
-    uint baudrate;
-    uint8_t scl_pin;
-    uint8_t sda_pin;
+    uint32_t baudrate;
+
+    bittino_bit_com_obj_t *bit;
 } busio_i2c_obj_t;

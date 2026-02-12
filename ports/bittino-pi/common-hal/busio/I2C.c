@@ -14,6 +14,8 @@
 #include "shared-bindings/bitbangio/I2C.h"
 
 #include "hardware/gpio.h"
+#include "../../bindings/bittino/bits/BIT_COM/BIT_COM.h"
+#include "../../lib/mtbus/mtbus.h"
 
 // Synopsys  DW_apb_i2c  (v2.01)  IP
 
@@ -22,86 +24,27 @@
 // One second
 #define BUS_TIMEOUT_US 1000000
 
-static i2c_inst_t *i2c[2] = {i2c0, i2c1};
-
 void common_hal_busio_i2c_construct(busio_i2c_obj_t *self,
     const mcu_pin_obj_t *scl, const mcu_pin_obj_t *sda, uint32_t frequency, uint32_t timeout) {
 
     // Ensure object starts in its deinit state.
     common_hal_busio_i2c_mark_deinit(self);
 
-    self->peripheral = NULL;
-    // I2C pins have a regular pattern. SCL is always odd and SDA is even. They match up in pairs
-    // so we can divide by two to get the instance. This pattern repeats.
-    size_t scl_instance = (scl->number / 2) % 2;
-    size_t sda_instance = (sda->number / 2) % 2;
-    if (scl->number % 2 == 1 && sda->number % 2 == 0 && scl_instance == sda_instance) {
-        self->peripheral = i2c[sda_instance];
+    if (scl == NULL) {
+        mp_raise_ValueError(MP_ERROR_TEXT("SCL is undefined"));
     }
-    if (self->peripheral == NULL) {
-        raise_ValueError_invalid_pins();
+    if (scl->bit == NULL) {
+        mp_raise_ValueError(MP_ERROR_TEXT("SCL is not a TrumpeT bit"));
     }
-    if ((i2c_get_hw(self->peripheral)->enable & I2C_IC_ENABLE_ENABLE_BITS) != 0) {
-        mp_raise_ValueError(MP_ERROR_TEXT("I2C peripheral in use"));
-    }
+    self->bit = MP_OBJ_TO_PTR(mp_arg_validate_type(scl->bit, &bittino_BIT_COM_type, MP_QSTR_bittino));
 
     mp_arg_validate_int_max(frequency, 1000000, MP_QSTR_frequency);
 
-
-    #if CIRCUITPY_REQUIRE_I2C_PULLUPS
-    // Test that the pins are in a high state. (Hopefully indicating they are pulled up.)
-    gpio_set_function(sda->number, GPIO_FUNC_SIO);
-    gpio_set_function(scl->number, GPIO_FUNC_SIO);
-    gpio_set_dir(sda->number, GPIO_IN);
-    gpio_set_dir(scl->number, GPIO_IN);
-
-    gpio_set_pulls(sda->number, false, true);
-    gpio_set_pulls(scl->number, false, true);
-
-    common_hal_mcu_delay_us(10);
-
-    gpio_set_pulls(sda->number, false, false);
-    gpio_set_pulls(scl->number, false, false);
-
-    // We must pull up within 3us to achieve 400khz.
-    common_hal_mcu_delay_us(3);
-
-    if (!gpio_get(sda->number) || !gpio_get(scl->number)) {
-        reset_pin_number(sda->number);
-        reset_pin_number(scl->number);
-        mp_raise_RuntimeError(MP_ERROR_TEXT("No pull up found on SDA or SCL; check your wiring"));
-    }
-    #endif
-
-    // Create a bitbangio.I2C object to do 0 byte writes.
-    //
-    // These are used to non-invasively detect I2C devices by sending
-    // the address and confirming an ACK.
-    // They are not supported by the RP2040 hardware.
-    //
-    // Must be done before setting up the I2C pins, since they will be
-    // set up as GPIO by the bitbangio.I2C object.
-    //
-    // Sets pins to open drain, high, and input.
-    //
-    // Do not use the default supplied clock stretching timeout here.
-    // It is too short for some devices. Use the busio timeout instead.
-    shared_module_bitbangio_i2c_construct(&self->bitbangio_i2c, scl, sda,
-        frequency, BUS_TIMEOUT_US);
-
-    self->baudrate = i2c_init(self->peripheral, frequency);
-
-    self->scl_pin = scl->number;
-    self->sda_pin = sda->number;
-    claim_pin(scl);
-    claim_pin(sda);
-
-    gpio_set_function(self->scl_pin, GPIO_FUNC_I2C);
-    gpio_set_function(self->sda_pin, GPIO_FUNC_I2C);
+    self->baudrate = frequency;
 }
 
 bool common_hal_busio_i2c_deinited(busio_i2c_obj_t *self) {
-    return self->sda_pin == NO_PIN;
+    return self->bit == NULL;
 }
 
 void common_hal_busio_i2c_deinit(busio_i2c_obj_t *self) {
@@ -109,15 +52,11 @@ void common_hal_busio_i2c_deinit(busio_i2c_obj_t *self) {
         return;
     }
 
-    i2c_deinit(self->peripheral);
-
-    reset_pin_number(self->sda_pin);
-    reset_pin_number(self->scl_pin);
     common_hal_busio_i2c_mark_deinit(self);
 }
 
 void common_hal_busio_i2c_mark_deinit(busio_i2c_obj_t *self) {
-    self->sda_pin = NO_PIN;
+    self->bit = NULL;
 }
 
 bool common_hal_busio_i2c_probe(busio_i2c_obj_t *self, uint8_t addr) {
@@ -144,52 +83,34 @@ void common_hal_busio_i2c_unlock(busio_i2c_obj_t *self) {
     self->has_lock = false;
 }
 
-static uint8_t _common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
+static mp_negative_errno_t _common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
     const uint8_t *data, size_t len, bool transmit_stop_bit) {
-    if (len == 0) {
-        // The RP2040 I2C peripheral will not perform 0 byte writes.
-        // So use bitbangio.I2C to do the write.
 
-        gpio_set_function(self->scl_pin, GPIO_FUNC_SIO);
-        gpio_set_function(self->sda_pin, GPIO_FUNC_SIO);
-        gpio_set_dir(self->scl_pin, GPIO_IN);
-        gpio_set_dir(self->sda_pin, GPIO_IN);
-        gpio_put(self->scl_pin, false);
-        gpio_put(self->sda_pin, false);
 
-        uint8_t status = shared_module_bitbangio_i2c_write(&self->bitbangio_i2c,
-            addr, data, len, transmit_stop_bit);
+    mtbus_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ len });
+    mtbus_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_data, len, (uint8_t *)data);
+    mtbus_master_write_registers(self->bit->super.id, BIT_COM_REG_send, 1, &(uint8_t){ addr });
 
-        // The pins must be set back to GPIO_FUNC_I2C in the order given here,
-        // SCL first, otherwise reads will hang.
-        gpio_set_function(self->scl_pin, GPIO_FUNC_I2C);
-        gpio_set_function(self->sda_pin, GPIO_FUNC_I2C);
+    return 0;
 
-        return status;
-    }
-
-    size_t result = i2c_write_timeout_us(self->peripheral, addr, data, len, !transmit_stop_bit, BUS_TIMEOUT_US);
-    if (result == len) {
-        return 0;
-    }
-    switch (result) {
-        case PICO_ERROR_GENERIC:
-            return MP_ENODEV;
-        case PICO_ERROR_TIMEOUT:
-            return MP_ETIMEDOUT;
-        default:
-            return MP_EIO;
-    }
+    // switch (result) {
+    //     case PICO_ERROR_GENERIC:
+    //         return MP_ENODEV;
+    //     case PICO_ERROR_TIMEOUT:
+    //         return MP_ETIMEDOUT;
+    //     default:
+    //         return MP_EIO;
+    // }
 }
 
-uint8_t common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
+mp_negative_errno_t common_hal_busio_i2c_write(busio_i2c_obj_t *self, uint16_t addr,
     const uint8_t *data, size_t len) {
     return _common_hal_busio_i2c_write(self, addr, data, len, true);
 }
 
-uint8_t common_hal_busio_i2c_read(busio_i2c_obj_t *self, uint16_t addr,
+mp_negative_errno_t common_hal_busio_i2c_read(busio_i2c_obj_t *self, uint16_t addr,
     uint8_t *data, size_t len) {
-    size_t result = i2c_read_timeout_us(self->peripheral, addr, data, len, false, BUS_TIMEOUT_US);
+    size_t result = 0; //i2c_read_timeout_us(self->peripheral, addr, data, len, false, BUS_TIMEOUT_US);
     if (result == len) {
         return 0;
     }
@@ -203,7 +124,7 @@ uint8_t common_hal_busio_i2c_read(busio_i2c_obj_t *self, uint16_t addr,
     }
 }
 
-uint8_t common_hal_busio_i2c_write_read(busio_i2c_obj_t *self, uint16_t addr,
+mp_negative_errno_t common_hal_busio_i2c_write_read(busio_i2c_obj_t *self, uint16_t addr,
     uint8_t *out_data, size_t out_len, uint8_t *in_data, size_t in_len) {
     uint8_t result = _common_hal_busio_i2c_write(self, addr, out_data, out_len, false);
     if (result != 0) {
@@ -214,6 +135,5 @@ uint8_t common_hal_busio_i2c_write_read(busio_i2c_obj_t *self, uint16_t addr,
 }
 
 void common_hal_busio_i2c_never_reset(busio_i2c_obj_t *self) {
-    never_reset_pin_number(self->scl_pin);
-    never_reset_pin_number(self->sda_pin);
+
 }

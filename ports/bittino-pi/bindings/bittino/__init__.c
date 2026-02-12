@@ -18,6 +18,7 @@
 #include "bits/BIT_Generic.h"
 #include "bits/BIT_IO/BIT_IO.h"
 #include "bits/BIT_COM/BIT_COM.h"
+#include "shared-bindings/microcontroller/Pin.h"
 
 busio_uart_obj_t bittino_uart;
 uint8_t bittino_uart_rx_buf[64];
@@ -45,40 +46,7 @@ static size_t g_bits_len = 0;
 static bittino_bit_generic_obj_t* g_bits[32];
 
 MP_REGISTER_ROOT_POINTER(mp_obj_t g_bits_owner);
-/*
-static mp_obj_t bittino_cast_to_native_base(mp_obj_t obj, const mp_obj_type_t *native_type) {
-    const mp_obj_type_t *t = mp_obj_get_type(obj);
 
-    // Exact type match: already native base
-    if (t == native_type) {
-        return obj;
-    }
-
-    // Not a subclass => fail
-    if (!mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(t), MP_OBJ_FROM_PTR(native_type))) {
-        return MP_OBJ_NULL;
-    }
-
-    // If it's a native object (including native C subclass), the object pointer
-    // is the native storage. DO NOT treat it as mp_obj_instance_t.
-    if (mp_obj_is_native_type(t)) {
-        return obj;
-    }
-
-    // Otherwise it should be a Python instance that wraps native base(s)
-    if (!mp_obj_is_instance_type(t)) {
-        return MP_OBJ_NULL;
-    }
-
-    mp_obj_instance_t *inst = MP_OBJ_TO_PTR(obj);
-    mp_obj_t native = inst->subobj[0];
-
-    // Optional but recommended: ensure native part was inited
-    mp_obj_assert_native_inited(native);
-
-    return native;
-}
-*/
 static bittino_bit_generic_obj_t *native_bit_generic(mp_obj_t obj) {
     mp_obj_t native = mp_obj_cast_to_native_base(obj, &bittino_BIT_Generic_type);
     if (native == MP_OBJ_NULL) {
@@ -121,11 +89,29 @@ static mp_obj_t bittino_configure(mp_obj_t seq_in) {
     for (size_t i = 0; i < n; i++) {
         g_bits[i] = native_bit_generic(items[i]); // accepts subclasses
         g_bits[i]->id = i + 1;
-        printf("#%d config item:\n", i);
-        printf("\tptr: %p\n", g_bits[i]);
-        printf("\tid: %d\n", g_bits[i]->id);
-        printf("\tins: %d\n", g_bits[i]->realtimes.count_relatime_in);
-        printf("\touts: %d\n", g_bits[i]->realtimes.count_relatime_out);
+        BITTINO_DEBUG_PRINT("#%d config item:\n", i);
+        BITTINO_DEBUG_PRINT("\tptr: %p\n", g_bits[i]);
+        BITTINO_DEBUG_PRINT("\tid: %d\n", g_bits[i]->id);
+        BITTINO_DEBUG_PRINT("\tins: %d\n", g_bits[i]->realtimes.count_relatime_in);
+        BITTINO_DEBUG_PRINT("\touts: %d\n", g_bits[i]->realtimes.count_relatime_out);
+
+        // Build pin name "MOD_x" as a dynamic string key
+        char pin_name[16];
+        snprintf(pin_name, sizeof(pin_name), "MOD_%d", g_bits[i]->id);
+
+        // Create the pin object
+        mcu_pin_obj_t *pin = m_new_obj(mcu_pin_obj_t);
+        pin->base.type = &mcu_pin_type;
+        pin->bit = g_bits[i];
+        pin->isUsed = false;
+        pin->number = NUM_BANK0_GPIOS + 1;
+
+        // Store with string key (not QSTR, since name is dynamic)
+        mp_obj_dict_store(
+            MP_OBJ_FROM_PTR(&bittino_pins_obj),
+            mp_obj_new_str(pin_name, strlen(pin_name)),
+            MP_OBJ_FROM_PTR(pin)
+        );
     }
     g_bits_len = n;
 
@@ -145,7 +131,7 @@ static bool bittino_comm_frame(repeating_timer_t *rt) {
     for (size_t i = 0; i < g_bits_len; i++) {
         bittino_bit_generic_obj_t *g = g_bits[i];
 
-        // printf("bittino_comm_frame: id: %d, ins: %d, outs: %d\n", g->id, g->realtimes.count_relatime_in, g->realtimes.count_relatime_out);
+        BITTINO_DEBUG_PRINT("bittino_comm_frame: id: %d, ins: %d, outs: %d\n", g->id, g->realtimes.count_relatime_in, g->realtimes.count_relatime_out);
         if (g->id > 0) {
             mtbus_master_realtime(
                 g->id,
@@ -263,29 +249,33 @@ static mp_obj_t bittino_send(mp_obj_t id, mp_obj_t address, mp_obj_t seq_in) {
 static MP_DEFINE_CONST_FUN_OBJ_3(bittino_send_obj, bittino_send);
 
 
-// static mp_obj_t bittino_realtime(mp_obj_t address, mp_obj_t count_in, mp_obj_t count_out) {
-//     mp_int_t address_int = mp_obj_get_int(address);
+mp_obj_dict_t bittino_pins_obj;
 
-//     mp_int_t value_int = mp_obj_get_int(value);
-
-//     memset(mtbus_regs_in, 0, sizeof(mtbus_regs_in));
-//     mtbus_regs_in[0] = value_int;
-
-//     mtbus_master_realtime(address_int, 1, 1, );
-
-//     for (int i = 0; i < MTBUS_REGS_COUNT; i++) {
-//         printf("OUT[%d]: %d\n", i, mtbus_regs_out[i]);
-//     }
-
-//     return mp_const_none;
-// }
-// static MP_DEFINE_CONST_FUN_OBJ_2(bittino_realtime_obj, bittino_realtime);
+static mp_obj_t bittino_module___init__(void) {
+    mp_obj_dict_init(&bittino_pins_obj, 0);
+    printf("bittino_module___init__");
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(bittino_module___init___obj, bittino_module___init__);
 
 
+// static mp_map_elem_t bittino_pins_table[1]; // at least 1 element to avoid zero-size
 
+// mp_obj_dict_t bittino_pins_obj = {
+//     .base = { &mp_type_dict },
+//     .map = {
+//         .all_keys_are_qstrs = 0,
+//         .is_fixed = 0,
+//         .is_ordered = 0,
+//         .used = 0,
+//         .alloc = MP_ARRAY_SIZE(bittino_pins_table),
+//         .table = bittino_pins_table,
+//     },
+// };
 
 static const mp_rom_map_elem_t bittino_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_bittino) },
+    { MP_ROM_QSTR(MP_QSTR___init__),  MP_ROM_PTR(&bittino_module___init___obj) },
 
     { MP_ROM_QSTR(MP_QSTR_BIT_Generic),   MP_ROM_PTR(&bittino_BIT_Generic_type) },
     { MP_ROM_QSTR(MP_QSTR_BIT_IO),   MP_ROM_PTR(&bittino_BIT_IO_type) },
@@ -302,9 +292,7 @@ static const mp_rom_map_elem_t bittino_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_set),  MP_ROM_PTR(&bittino_set_obj) },
     { MP_ROM_QSTR(MP_QSTR_send),  MP_ROM_PTR(&bittino_send_obj) },
 
-
-    // { MP_ROM_QSTR(MP_QSTR_realtime),  MP_ROM_PTR(&bittino_realtime_obj) },
-    // { MP_ROM_QSTR(MP_QSTR_heap_caps_get_total_size), MP_ROM_PTR(&bittino_heap_caps_get_total_size_obj)},
+    { MP_ROM_QSTR(MP_QSTR_pins),  MP_ROM_PTR(&bittino_pins_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(bittino_module_globals, bittino_module_globals_table);

@@ -11,8 +11,8 @@ void _bittino_BIT_Generic_init_from_args(
     mp_int_t in_count,
     mp_int_t out_count
 ) {
-    printf("\tptr - _bittino_BIT_Generic_init_from_args: %p\n", self);
-    printf("ins: %d, outs: %d\n", in_count, out_count);
+    BITTINO_DEBUG_PRINT("\tptr - _bittino_BIT_Generic_init_from_args: %p\n", self);
+    BITTINO_DEBUG_PRINT("ins: %d, outs: %d\n", in_count, out_count);
 
     self->id = 0;
 
@@ -37,7 +37,7 @@ static mp_obj_t bittino_BIT_Generic_make_new(const mp_obj_type_t *type, size_t n
     mp_int_t in_count = mp_arg_validate_int_min(args[ARG_in_count].u_int, 1, MP_QSTR_in_count);
     mp_int_t out_count = mp_arg_validate_int_min(args[ARG_out_count].u_int, 1, MP_QSTR_out_count);
 
-    printf("\tptr - bittino_BIT_Generic_make_new: %p\n", self);
+    BITTINO_DEBUG_PRINT("\tptr - bittino_BIT_Generic_make_new: %p\n", self);
     _bittino_BIT_Generic_init_from_args(self, in_count, out_count);
     return MP_OBJ_FROM_PTR(self);
 }

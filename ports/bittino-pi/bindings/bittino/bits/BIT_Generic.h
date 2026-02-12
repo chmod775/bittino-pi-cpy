@@ -7,6 +7,7 @@ extern const mp_obj_type_t bittino_BIT_Generic_type;
 typedef struct {
     mp_obj_base_t base;
     uint8_t id;
+    uint32_t type;
     bittino_realtimes_t realtimes;
 } bittino_bit_generic_obj_t;
 

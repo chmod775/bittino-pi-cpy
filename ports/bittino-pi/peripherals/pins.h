@@ -16,6 +16,8 @@ typedef struct {
     mp_obj_base_t base;
     bittino_bit_generic_obj_t *bit;
     uint8_t number;
+    bool isUsed;
+    bool neverReset;
 } mcu_pin_obj_t;
 
 extern const mcu_pin_obj_t pin_GPIO0;

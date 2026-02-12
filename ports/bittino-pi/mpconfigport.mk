@@ -1,5 +1,7 @@
 # These modules are implemented in ports/<port>/common-hal:
 
+CIRCUITPY_MUTABLE_BOARD = 1
+
 # Typically the first module to create
 CIRCUITPY_MICROCONTROLLER = 1
 # Typically the second module to create
@@ -34,7 +36,7 @@ CIRCUITPY_PIXELBUF = 0
 # Requires OS
 CIRCUITPY_RANDOM = 0
 # Requires OS, filesystem
-CIRCUITPY_STORAGE = 0
+CIRCUITPY_STORAGE = 1
 # Requires Microcontroller
 CIRCUITPY_TOUCHIO = 0
 # Requires USB

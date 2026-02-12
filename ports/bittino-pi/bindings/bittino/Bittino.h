@@ -2,15 +2,19 @@
 #include "py/obj.h"
 #include "py/proto.h"
 
+#ifdef BITTINO_DEBUG
+#include <stdio.h>
+#define BITTINO_DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+#define BITTINO_DEBUG_PRINT(...) (void) (0)
+#endif
+
 typedef struct {
     uint8_t count_relatime_in;
     uint8_t count_relatime_out;
     uint8_t *relatime_in;
     uint8_t *relatime_out;
 } bittino_realtimes_t;
-
-
-
 
 typedef bittino_realtimes_t* (*bittino_module_get_realtimes)(mp_obj_t);
 

@@ -4,6 +4,7 @@
 #include "py/mphal.h"
 #include "py/proto.h"
 #include "../../Bittino.h"
+#include "../../__init__.h"
 #include "BIT_COM.h"
 #include "../../../../lib/mtbus/mtbus.h"
 
@@ -13,6 +14,7 @@ static mp_obj_t bittino_BIT_COM_make_new(const mp_obj_type_t *type,
 
     bittino_bit_com_obj_t *self = mp_obj_malloc(bittino_bit_com_obj_t, &bittino_BIT_COM_type);
     _bittino_BIT_Generic_init_from_args(&self->super, 1, 1);
+
     return MP_OBJ_FROM_PTR(self);
 }
 
