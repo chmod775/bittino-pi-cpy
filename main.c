@@ -21,6 +21,7 @@
 #include "py/stackctrl.h"
 
 #include "shared/readline/readline.h"
+#include "shared/runtime/gchelper.h"
 #include "shared/runtime/pyexec.h"
 
 #include "background.h"
@@ -30,7 +31,6 @@
 #include "supervisor/cpu.h"
 #include "supervisor/filesystem.h"
 #include "supervisor/port.h"
-#include "supervisor/shared/cpu_regs.h"
 #include "supervisor/shared/reload.h"
 #include "supervisor/shared/safe_mode.h"
 #include "supervisor/shared/serial.h"
@@ -1161,13 +1161,7 @@ int __attribute__((used)) main(void) {
 void gc_collect(void) {
     gc_collect_start();
 
-    // Load register values onto the stack. They get collected below with the rest of the stack.
-    size_t regs[SAVED_REGISTER_COUNT];
-    mp_uint_t sp = cpu_get_regs_and_sp(regs);
-
-    // This naively collects all object references from an approximate stack
-    // range.
-    gc_collect_root((void **)sp, ((mp_uint_t)port_stack_get_top() - sp) / sizeof(mp_uint_t));
+    gc_helper_collect_regs_and_stack();
 
     // This collects root pointers from the VFS mount table. Some of them may
     // have lost their references in the VM even though they are mounted.

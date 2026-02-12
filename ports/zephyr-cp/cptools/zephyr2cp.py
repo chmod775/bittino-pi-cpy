@@ -16,6 +16,7 @@ MINIMUM_RAM_SIZE = 1024
 
 MANUAL_COMPAT_TO_DRIVER = {
     "renesas_ra_nv_flash": "flash",
+    "soc_nv_flash": "flash",
     "nordic_nrf_uarte": "serial",
     "nordic_nrf_uart": "serial",
     "nordic_nrf_twim": "i2c",
@@ -370,7 +371,7 @@ def find_ram_regions(device_tree):
 
 
 @cpbuild.run_in_thread
-def zephyr_dts_to_cp_board(portdir, builddir, zephyrbuilddir):  # noqa: C901
+def zephyr_dts_to_cp_board(board_id, portdir, builddir, zephyrbuilddir):  # noqa: C901
     board_dir = builddir / "board"
     # Auto generate board files from device tree.
 
@@ -384,7 +385,14 @@ def zephyr_dts_to_cp_board(portdir, builddir, zephyrbuilddir):  # noqa: C901
     zephyr_board_dir = pathlib.Path(runners["config"]["board_dir"])
     board_yaml = zephyr_board_dir / "board.yml"
     board_yaml = yaml.safe_load(board_yaml.read_text())
-    board_info["vendor_id"] = board_yaml["board"]["vendor"]
+    if "board" not in board_yaml and "boards" in board_yaml:
+        for board in board_yaml["boards"]:
+            if board["name"] == board_id:
+                board_yaml = board
+                break
+    else:
+        board_yaml = board_yaml["board"]
+    board_info["vendor_id"] = board_yaml["vendor"]
     vendor_index = zephyr_board_dir.parent / "index.rst"
     if vendor_index.exists():
         vendor_index = vendor_index.read_text()
@@ -393,9 +401,9 @@ def zephyr_dts_to_cp_board(portdir, builddir, zephyrbuilddir):  # noqa: C901
     else:
         vendor_name = board_info["vendor_id"]
     board_info["vendor"] = vendor_name
-    soc_name = board_yaml["board"]["socs"][0]["name"]
+    soc_name = board_yaml["socs"][0]["name"]
     board_info["soc"] = soc_name
-    board_name = board_yaml["board"]["full_name"]
+    board_name = board_yaml["full_name"]
     board_info["name"] = board_name
     # board_id_yaml = zephyr_board_dir / (zephyr_board_dir.name + ".yaml")
     # board_id_yaml = yaml.safe_load(board_id_yaml.read_text())
@@ -540,15 +548,18 @@ def zephyr_dts_to_cp_board(portdir, builddir, zephyrbuilddir):  # noqa: C901
                         board_names[(ioport, num)].append("BUTTON")
                     board_names[(ioport, num)].extend(node2alias[key])
 
-    a, b = all_ioports[:2]
-    i = 0
-    while a[i] == b[i]:
-        i += 1
-    shared_prefix = a[:i]
-    for ioport in ioports:
-        if not ioport.startswith(shared_prefix):
-            shared_prefix = ""
-            break
+    if len(all_ioports) > 1:
+        a, b = all_ioports[:2]
+        i = 0
+        while a[i] == b[i]:
+            i += 1
+        shared_prefix = a[:i]
+        for ioport in ioports:
+            if not ioport.startswith(shared_prefix):
+                shared_prefix = ""
+                break
+    else:
+        shared_prefix = all_ioports[0]
 
     pin_defs = []
     pin_declarations = ["#pragma once"]
@@ -658,8 +669,14 @@ static MP_DEFINE_CONST_FUN_OBJ_0({function_object}, {c_function_name});""".lstri
         device, start, end, size, path = ram
         max_size = max(max_size, size)
         # We always start at the end of a Zephyr linker section so we need the externs and &.
-        ram_externs.append(f"extern uint32_t {start};")
-        start = "&" + start
+        if board_id in ["native_sim"]:
+            ram_externs.append("// This is a native board so we provide all of RAM for our heaps.")
+            ram_externs.append(f"static uint32_t _{device}[{size // 4}]; // {path}")
+            start = f"(const uint32_t *) (_{device})"
+            end = f"(const uint32_t *)(_{device} + {size // 4})"
+        else:
+            ram_externs.append(f"extern uint32_t {start};")
+            start = "&" + start
         ram_list.append(f"    {start}, {end}, // {path}")
     ram_list = "\n".join(ram_list)
     ram_externs = "\n".join(ram_externs)

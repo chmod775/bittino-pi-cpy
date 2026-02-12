@@ -42,3 +42,4 @@ setuptools
 # For zephyr port
 tomlkit
 pytest
+perfetto

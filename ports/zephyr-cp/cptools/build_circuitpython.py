@@ -277,9 +277,10 @@ async def build_circuitpython():
     enable_mpy_native = False
     full_build = True
     usb_host = False
+    zephyr_board = cmake_args["BOARD"]
     board = cmake_args["BOARD_ALIAS"]
     if not board:
-        board = cmake_args["BOARD"]
+        board = zephyr_board
     translation = cmake_args["TRANSLATION"]
     if not translation:
         translation = "en_US"
@@ -319,7 +320,7 @@ async def build_circuitpython():
         )
 
         board_autogen_task = tg.create_task(
-            zephyr_dts_to_cp_board(portdir, builddir, zephyrbuilddir)
+            zephyr_dts_to_cp_board(zephyr_board, portdir, builddir, zephyrbuilddir)
         )
     board_info = board_autogen_task.result()
     mpconfigboard_fn = board_tools.find_mpconfigboard(portdir, board)
@@ -353,6 +354,8 @@ async def build_circuitpython():
         "shared/readline/readline.c",
         "shared/runtime/buffer_helper.c",
         "shared/runtime/context_manager_helpers.c",
+        "shared/runtime/gchelper_generic.c",
+        "shared/runtime/gchelper_native.c",
         "shared/runtime/pyexec.c",
         "shared/runtime/interrupt_char.c",
         "shared/runtime/stdout_helpers.c",
@@ -548,8 +551,6 @@ async def build_circuitpython():
     source_files.append(portdir / "bindings/zephyr_kernel/__init__.c")
     source_files.append(portdir / "common-hal/zephyr_kernel/__init__.c")
     # source_files.append(srcdir / "ports" / port / "peripherals" / "nrf" / "nrf52840" / "pins.c")
-
-    assembly_files.append(srcdir / "supervisor/shared/cpu_regs.S")
 
     source_files.extend(assembly_files)
 

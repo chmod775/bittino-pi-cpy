@@ -7,6 +7,7 @@
 #include "supervisor/port.h"
 
 #include "mpconfigboard.h"
+#include "supervisor/shared/tick.h"
 
 #include <zephyr/autoconf.h>
 #include <zephyr/kernel.h>
@@ -66,6 +67,10 @@ void port_wake_main_task_from_isr(void) {
 
 void port_yield(void) {
     k_yield();
+    // Make sure time advances in the simulator.
+    #if defined(CONFIG_ARCH_POSIX)
+    k_busy_wait(100);
+    #endif
 }
 
 void port_boot_info(void) {
@@ -73,14 +78,14 @@ void port_boot_info(void) {
 
 // Get stack limit address
 uint32_t *port_stack_get_limit(void) {
-    return k_current_get()->stack_info.start;
+    return (uint32_t *)k_current_get()->stack_info.start;
 }
 
 // Get stack top address
 uint32_t *port_stack_get_top(void) {
     _thread_stack_info_t stack_info = k_current_get()->stack_info;
 
-    return stack_info.start + stack_info.size - stack_info.delta;
+    return (uint32_t *)(stack_info.start + stack_info.size - stack_info.delta);
 }
 
 // Save and retrieve a word from memory that is preserved over reset. Used for safe mode.
@@ -181,7 +186,10 @@ size_t port_heap_get_largest_free_size(void) {
 
 void assert_post_action(const char *file, unsigned int line) {
     printk("Assertion failed at %s:%u\n", file, line);
+    // Check that this is arm
+    #if defined(__arm__)
     __asm__ ("bkpt");
+    #endif
     while (1) {
         ;
     }
