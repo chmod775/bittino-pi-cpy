@@ -31,13 +31,16 @@ static mp_obj_t bittino_BIT_COM_send(mp_obj_t self_in, mp_obj_t address_in, mp_o
     mp_obj_get_array(data_in, &data_count, &data_items);
 
     uint8_t data[256];
+    data[0] = address_int;
     for (size_t i = 0; i < data_count; i++) {
-        data[i] = mp_obj_get_int(data_items[i]);
+        data[i + 1] = mp_obj_get_int(data_items[i]);
     }
 
-    bittino_master_write_registers(self->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ data_count });
-    bittino_master_write_registers(self->super.id, BIT_COM_REG_tx_data, data_count, data);
-    bittino_master_write_registers(self->super.id, BIT_COM_REG_send, 1, &(uint8_t){ address_int });
+    bittino_master_write_registers(self->super.id, BIT_COM_REG_tx_data, data_count + 1, data, false);
+
+    // bittino_master_write_registers(self->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ data_count }, false);
+    // bittino_master_write_registers(self->super.id, BIT_COM_REG_tx_data, data_count, data), false;
+    // bittino_master_write_registers(self->super.id, BIT_COM_REG_send, 1, &(uint8_t){ address_int }, false);
 
     return mp_const_none;
 }

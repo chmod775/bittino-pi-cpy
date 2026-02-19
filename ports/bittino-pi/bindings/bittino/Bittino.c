@@ -39,9 +39,24 @@ bool bittino_comm_frame(repeating_timer_t *rt) {
     return true;
 }
 
-void bittino_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers) {
+void bittino_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers, bool skip_errors) {
     bittino_bus_busy = true;
-    mtbus_master_write_registers(slave_id, address, count, registers);
+    
+    bool ret = false;
+    uint8_t retries = 0;
+    for (retries = 0; retries < 10; retries++) {
+        ret = mtbus_master_write_registers(slave_id, address, count, registers);
+        busy_wait_us(50);
+        if (ret | skip_errors) break;
+    }
+    
+    if (retries > 0) {
+        printf("BITTINO Warning: Re-sended message %d times.\n", retries);
+    }
+    if (!ret && !skip_errors) {
+        printf("BITTINO Error: Timeout re-sending message (10 times)\n");
+    }
+
     bittino_bus_busy = false;
     if (bittino_frame_request) {
         bittino_frame_request = false;

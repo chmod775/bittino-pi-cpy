@@ -28,4 +28,4 @@ typedef struct _bittino_module_p_t {
 extern repeating_timer_t bittino_frame_timer;
 
 extern bool bittino_comm_frame(repeating_timer_t *rt);
-extern void bittino_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers);
+extern void bittino_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers, bool skip_errors);

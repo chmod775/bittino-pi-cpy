@@ -11,12 +11,18 @@ digitalio_digitalinout_obj_t bittino_scs_pin;
 
 int mtbus_send(uint8_t *buf, uint8_t size) {
     int uart_errcode;
+    uint32_t flags = save_and_disable_interrupts();
+    //common_hal_mcu_disable_interrupts();
     common_hal_busio_uart_write(&bittino_uart, (const uint8_t *)buf, size, &uart_errcode);
+    //common_hal_mcu_enable_interrupts();
+    restore_interrupts(flags);
     return size;
 }
 int mtbus_receive(uint8_t *buf, uint8_t size) {
     int uart_errcode;
+    //common_hal_mcu_disable_interrupts();
     size_t bytes_read = common_hal_busio_uart_read(&bittino_uart, buf, size, &uart_errcode);
+    //common_hal_mcu_enable_interrupts();
     return bytes_read;
 }
 int mtbus_flush(void) {
@@ -172,7 +178,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(bittino_sleep_us_obj, bittino_sleep_us);
 static mp_obj_t bittino_set(mp_obj_t new_address) {
     mp_int_t new_address_int = mp_obj_get_int(new_address);
 
-    bittino_master_write_registers(63, 0, 1, (uint8_t*)&new_address_int);
+    bittino_master_write_registers(63, 0, 1, (uint8_t*)&new_address_int, true);
 
     return mp_const_none;
 }
@@ -196,7 +202,7 @@ static mp_obj_t bittino_send(mp_obj_t id, mp_obj_t address, mp_obj_t seq_in) {
         tmp_value[i] = mp_obj_get_int(items[i]);
     }
 
-    bittino_master_write_registers(id_int, address_int, n, (uint8_t*)&tmp_value);
+    bittino_master_write_registers(id_int, address_int, n, (uint8_t*)&tmp_value, false);
 
     return mp_const_none;
 }

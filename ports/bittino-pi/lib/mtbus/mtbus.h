@@ -97,7 +97,7 @@ void mtbus_memcopy_map(mtbus_map_t* map, uint16_t address, uint8_t size, mtbus_r
 mtbus_reg_size mtbus_read_map(mtbus_map_t* map, uint16_t address);
 
 void mtbus_slave_process(void);
-void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t realtimes_out_count, uint8_t *realtimes_in, uint8_t *realtimes_out);
-void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers);
+bool mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t realtimes_out_count, uint8_t *realtimes_in, uint8_t *realtimes_out);
+bool mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers);
 
 #endif

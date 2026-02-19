@@ -12,7 +12,13 @@ uint8_t mtbus_buf_tx_count = 0;
 uint8_t mtbus_realtimes_in[MTBUS_REALTIMES_IN_COUNT];
 uint8_t mtbus_realtimes_out[MTBUS_REALTIMES_OUT_COUNT];
 
-static void mtbus_error(const char* message) {
+static bool mtbus_error_master(const char* message) {
+  mtbus_busy = false;
+  printf("MTBUS Error: %s\n", message);
+  return false;
+}
+
+static void mtbus_error_slave(const char* message) {
   mtbus_busy = false;
   printf("MTBUS Error: %s\n", message);
 }
@@ -66,7 +72,7 @@ static uint16_t mtbus_get16(uint8_t **buf) {
 
 static void mtbus_header(mtbus_packet_t *packet, bool tx, uint8_t **buf) {
   if (tx) {
-    if (packet->id > 63) return mtbus_error("Packet ID cannot be over 63.");
+    if (packet->id > 63) return mtbus_error_slave("Packet ID cannot be over 63.");
     mtbus_put8(buf, packet->id | packet->func);
     if (packet->func == MTBUS_FUNC_SUBFUNC) {
       mtbus_put8(buf, packet->subfunc);
@@ -243,12 +249,12 @@ void mtbus_slave_process(void) {
   mtbus_footer(&packet_tx, true, &buftx_ptr);
 
   int err_send = mtbus_send(mtbus_buf_tx, buftx_ptr - mtbus_buf_tx);
-  if (err_send < 0) return mtbus_error("mtbus_send error.");
+  if (err_send < 0) return mtbus_error_slave("mtbus_send error.");
 }
 
 /* ### Master ### */
 bool mtbus_busy = false;
-void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t realtimes_out_count, uint8_t *realtimes_in, uint8_t *realtimes_out) {
+bool mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t realtimes_out_count, uint8_t *realtimes_in, uint8_t *realtimes_out) {
   mtbus_busy = true;
 
   // Send
@@ -267,7 +273,7 @@ void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t
   mtbus_footer(&packet_tx, true, &buftx_ptr);
 
   int err_send = mtbus_send(mtbus_buf_tx, buftx_ptr - mtbus_buf_tx);
-  if (err_send < 0) return mtbus_error("mtbus_send error.");
+  if (err_send < 0) return mtbus_error_master("mtbus_send error.");
 
   // Receive
   uint8_t *bufrx_ptr = mtbus_buf_rx;
@@ -276,8 +282,8 @@ void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t
   mtbus_packet_t packet_rx = {0};
   mtbus_header(&packet_rx, false, &bufrx_ptr);
 
-  if (packet_tx.id != packet_rx.id) return mtbus_error("Slave ID RX not matching.");
-  if (packet_tx.func != packet_rx.func) return mtbus_error("Slave FUNC RX not matching.");
+  if (packet_tx.id != packet_rx.id) return mtbus_error_master("Slave ID RX not matching.");
+  if (packet_tx.func != packet_rx.func) return mtbus_error_master("Slave FUNC RX not matching.");
 
   for (uint8_t i = 0; i < realtimes_out_count; i++) {
     MTBUS_RECEIVE(bufrx_ptr, 1);
@@ -286,12 +292,13 @@ void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t
 
   uint8_t rx_calc_crc = mtbus_calc_crc(mtbus_buf_rx, bufrx_ptr - mtbus_buf_rx);
   mtbus_footer(&packet_rx, false, &bufrx_ptr);
-  if (packet_rx.crc != rx_calc_crc) return mtbus_error("Slave CRC RX not matching.");
+  if (packet_rx.crc != rx_calc_crc) return mtbus_error_master("Slave CRC RX not matching.");
 
   mtbus_busy = false;
+  return true;
 }
 
-void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers) {  
+bool mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers) {  
   mtbus_busy = true;
 
   // Send
@@ -313,7 +320,7 @@ void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t co
   mtbus_footer(&packet_tx, true, &buftx_ptr);
 
   int err_send = mtbus_send(mtbus_buf_tx, buftx_ptr - mtbus_buf_tx);
-  if (err_send < 0) return mtbus_error("mtbus_send error.");
+  if (err_send < 0) return mtbus_error_master("mtbus_send error.");
 
   // Receive
   uint8_t *bufrx_ptr = mtbus_buf_rx;
@@ -322,19 +329,20 @@ void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t co
   mtbus_packet_t packet_rx = {0};
   mtbus_header(&packet_rx, false, &bufrx_ptr);
 
-  if (packet_tx.id != packet_rx.id) return mtbus_error("RX: id not matching.");
-  if (packet_tx.func != packet_rx.func) return mtbus_error("RX: func not matching.");
+  if (packet_tx.id != packet_rx.id) return mtbus_error_master("RX: id not matching.");
+  if (packet_tx.func != packet_rx.func) return mtbus_error_master("RX: func not matching.");
 
-  MTBUS_RECEIVE(bufrx_ptr, 3);
-  uint16_t rx_address = mtbus_get16(&bufrx_ptr);
-  uint8_t rx_count = mtbus_get8(&bufrx_ptr);
+  // MTBUS_RECEIVE(bufrx_ptr, 3);
+  // uint16_t rx_address = mtbus_get16(&bufrx_ptr);
+  // uint8_t rx_count = mtbus_get8(&bufrx_ptr);
 
-  if (address != rx_address) return mtbus_error("RX: rx_address not matching.");
-  if (count != rx_count) return mtbus_error("RX: count not matching.");
+  // if (address != rx_address) return mtbus_error_master("RX: rx_address not matching.");
+  // if (count != rx_count) return mtbus_error_master("RX: count not matching.");
 
   uint8_t rx_calc_crc = mtbus_calc_crc(mtbus_buf_rx, bufrx_ptr - mtbus_buf_rx);
   mtbus_footer(&packet_rx, false, &bufrx_ptr);
-  if (packet_rx.crc != rx_calc_crc) return mtbus_error("RX: crc not matching.");
+  if (packet_rx.crc != rx_calc_crc) return mtbus_error_master("RX: crc not matching.");
 
   mtbus_busy = false;
+  return true;
 }

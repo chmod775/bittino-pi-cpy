@@ -87,9 +87,16 @@ static mp_negative_errno_t _common_hal_busio_i2c_write(busio_i2c_obj_t *self, ui
     const uint8_t *data, size_t len, bool transmit_stop_bit) {
 
 
-    bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ len });
-    bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_data, len, (uint8_t *)data);
-    bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_send, 1, &(uint8_t){ addr });
+    uint8_t t_buffer[256];
+    t_buffer[0] = addr;
+    memcpy(&t_buffer[1], data, len);
+
+    bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_data, len + 1, t_buffer, false);
+
+
+    // bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ len });
+    // bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_data, len, (uint8_t *)data);
+    // bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_send, 1, &(uint8_t){ addr });
 
     return 0;
 
