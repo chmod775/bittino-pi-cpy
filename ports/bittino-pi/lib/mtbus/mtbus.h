@@ -87,6 +87,8 @@ extern bool mtbus_read_scs(void);
 #define MTBUS_RECEIVE(...) mtbus_receive(__VA_ARGS__)
 #endif
 
+extern bool mtbus_busy;
+
 void mtbus_map_pointer(uint16_t start_address, uint16_t end_address, mtbus_reg_size *data);
 void mtbus_map_function(uint16_t start_address, uint16_t end_address, mtbus_read_reg_cb_t read_fn, mtbus_write_reg_cb_t write_fn);
 mtbus_map_t* mtbus_find_map(uint16_t start_address, uint16_t end_address);

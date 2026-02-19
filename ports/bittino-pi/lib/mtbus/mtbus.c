@@ -13,8 +13,8 @@ uint8_t mtbus_realtimes_in[MTBUS_REALTIMES_IN_COUNT];
 uint8_t mtbus_realtimes_out[MTBUS_REALTIMES_OUT_COUNT];
 
 static void mtbus_error(const char* message) {
-
-  // printf("MTBUS Error: %s\n", message);
+  mtbus_busy = false;
+  printf("MTBUS Error: %s\n", message);
 }
 
 /* ### CRC Table ### */
@@ -247,7 +247,10 @@ void mtbus_slave_process(void) {
 }
 
 /* ### Master ### */
+bool mtbus_busy = false;
 void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t realtimes_out_count, uint8_t *realtimes_in, uint8_t *realtimes_out) {
+  mtbus_busy = true;
+
   // Send
   uint8_t *buftx_ptr = mtbus_buf_tx;
   mtbus_packet_t packet_tx;
@@ -284,9 +287,13 @@ void mtbus_master_realtime(uint8_t slave_id, uint8_t realtimes_in_count, uint8_t
   uint8_t rx_calc_crc = mtbus_calc_crc(mtbus_buf_rx, bufrx_ptr - mtbus_buf_rx);
   mtbus_footer(&packet_rx, false, &bufrx_ptr);
   if (packet_rx.crc != rx_calc_crc) return mtbus_error("Slave CRC RX not matching.");
+
+  mtbus_busy = false;
 }
 
-void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers) {
+void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t count, uint8_t *registers) {  
+  mtbus_busy = true;
+
   // Send
   uint8_t *buftx_ptr = mtbus_buf_tx;
   mtbus_packet_t packet_tx;
@@ -300,7 +307,6 @@ void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t co
 
   for (int i = 0; i < count; i++) {
     mtbus_put8(&buftx_ptr, registers[i]);
-    printf("%d, ", registers[i]);
   }
 
   packet_tx.crc = mtbus_calc_crc(mtbus_buf_tx, buftx_ptr - mtbus_buf_tx);
@@ -329,4 +335,6 @@ void mtbus_master_write_registers(uint8_t slave_id, uint16_t address, uint8_t co
   uint8_t rx_calc_crc = mtbus_calc_crc(mtbus_buf_rx, bufrx_ptr - mtbus_buf_rx);
   mtbus_footer(&packet_rx, false, &bufrx_ptr);
   if (packet_rx.crc != rx_calc_crc) return mtbus_error("RX: crc not matching.");
+
+  mtbus_busy = false;
 }

@@ -15,7 +15,7 @@
 
 #include "hardware/gpio.h"
 #include "../../bindings/bittino/bits/BIT_COM/BIT_COM.h"
-#include "../../lib/mtbus/mtbus.h"
+#include "../../bindings/bittino/Bittino.h"
 
 // Synopsys  DW_apb_i2c  (v2.01)  IP
 
@@ -87,9 +87,9 @@ static mp_negative_errno_t _common_hal_busio_i2c_write(busio_i2c_obj_t *self, ui
     const uint8_t *data, size_t len, bool transmit_stop_bit) {
 
 
-    mtbus_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ len });
-    mtbus_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_data, len, (uint8_t *)data);
-    mtbus_master_write_registers(self->bit->super.id, BIT_COM_REG_send, 1, &(uint8_t){ addr });
+    bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ len });
+    bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_tx_data, len, (uint8_t *)data);
+    bittino_master_write_registers(self->bit->super.id, BIT_COM_REG_send, 1, &(uint8_t){ addr });
 
     return 0;
 

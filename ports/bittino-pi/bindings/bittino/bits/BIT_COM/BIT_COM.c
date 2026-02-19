@@ -6,7 +6,6 @@
 #include "../../Bittino.h"
 #include "../../__init__.h"
 #include "BIT_COM.h"
-#include "../../../../lib/mtbus/mtbus.h"
 
 static mp_obj_t bittino_BIT_COM_make_new(const mp_obj_type_t *type,
                                 size_t n_args, size_t n_kw,
@@ -36,9 +35,9 @@ static mp_obj_t bittino_BIT_COM_send(mp_obj_t self_in, mp_obj_t address_in, mp_o
         data[i] = mp_obj_get_int(data_items[i]);
     }
 
-    mtbus_master_write_registers(self->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ data_count });
-    mtbus_master_write_registers(self->super.id, BIT_COM_REG_tx_data, data_count, data);
-    mtbus_master_write_registers(self->super.id, BIT_COM_REG_send, 1, &(uint8_t){ address_int });
+    bittino_master_write_registers(self->super.id, BIT_COM_REG_tx_len, 1, &(uint8_t){ data_count });
+    bittino_master_write_registers(self->super.id, BIT_COM_REG_tx_data, data_count, data);
+    bittino_master_write_registers(self->super.id, BIT_COM_REG_send, 1, &(uint8_t){ address_int });
 
     return mp_const_none;
 }

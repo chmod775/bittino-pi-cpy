@@ -1,27 +1,10 @@
-#include <stdio.h>
-
-#include "py/obj.h"
-#include "py/objtype.h"
-#include "py/runtime.h"
-#include "py/mphal.h"
-#include "py/gc.h"
-
-#include "bindings/bittino/__init__.h"
-#include "shared-bindings/busio/UART.h"
-#include "shared-bindings/digitalio/DigitalInOut.h"
-#include "shared-bindings/microcontroller/__init__.h"
-#include "lib/mtbus/mtbus.h"
-#include "lib/nanomodbus/nanomodbus.h"
-#include "hardware/irq.h"
-
-#include "Bittino.h"
-#include "bits/BIT_Generic.h"
-#include "bits/BIT_IO/BIT_IO.h"
-#include "bits/BIT_COM/BIT_COM.h"
-#include "shared-bindings/microcontroller/Pin.h"
+#include "__init__.h"
 
 busio_uart_obj_t bittino_uart;
 uint8_t bittino_uart_rx_buf[64];
+
+size_t g_bits_len = 0;
+bittino_bit_generic_obj_t* g_bits[32];
 
 digitalio_digitalinout_obj_t bittino_led_red;
 digitalio_digitalinout_obj_t bittino_scs_pin;
@@ -40,10 +23,6 @@ int mtbus_flush(void) {
     common_hal_busio_uart_clear_rx_buffer(&bittino_uart);
     return 0;
 }
-
-
-static size_t g_bits_len = 0;
-static bittino_bit_generic_obj_t* g_bits[32];
 
 MP_REGISTER_ROOT_POINTER(mp_obj_t g_bits_owner);
 
@@ -124,42 +103,17 @@ MP_DEFINE_CONST_FUN_OBJ_1(bittino_configure_obj, bittino_configure);
 
 
 
-static bool toggle_led = false;
-
-static repeating_timer_t t;
-static bool bittino_comm_frame(repeating_timer_t *rt) {
-    for (size_t i = 0; i < g_bits_len; i++) {
-        bittino_bit_generic_obj_t *g = g_bits[i];
-
-        BITTINO_DEBUG_PRINT("bittino_comm_frame: id: %d, ins: %d, outs: %d\n", g->id, g->realtimes.count_relatime_in, g->realtimes.count_relatime_out);
-        if (g->id > 0) {
-            mtbus_master_realtime(
-                g->id,
-                g->realtimes.count_relatime_in,
-                g->realtimes.count_relatime_out,
-                (uint8_t *)g->realtimes.relatime_in,
-                (uint8_t *)g->realtimes.relatime_out
-            );
-
-            busy_wait_us(50);
-        }
-    }
-
-    common_hal_digitalio_digitalinout_set_value(&bittino_led_red, toggle_led);
-    toggle_led = !toggle_led;
-    return true;
-}
 
 static mp_obj_t bittino_start(void) {
     alarm_pool_init_default();
-    alarm_pool_add_repeating_timer_ms(alarm_pool_get_default(), 10, bittino_comm_frame, NULL, &t);
+    alarm_pool_add_repeating_timer_ms(alarm_pool_get_default(), 10, bittino_comm_frame, NULL, &bittino_frame_timer);
 
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(bittino_start_obj, bittino_start);
 
 static mp_obj_t bittino_stop(void) {
-    cancel_repeating_timer(&t);
+    cancel_repeating_timer(&bittino_frame_timer);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(bittino_stop_obj, bittino_stop);
@@ -218,7 +172,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(bittino_sleep_us_obj, bittino_sleep_us);
 static mp_obj_t bittino_set(mp_obj_t new_address) {
     mp_int_t new_address_int = mp_obj_get_int(new_address);
 
-    mtbus_master_write_registers(63, 0, 1, (uint8_t*)&new_address_int);
+    bittino_master_write_registers(63, 0, 1, (uint8_t*)&new_address_int);
 
     return mp_const_none;
 }
@@ -242,7 +196,7 @@ static mp_obj_t bittino_send(mp_obj_t id, mp_obj_t address, mp_obj_t seq_in) {
         tmp_value[i] = mp_obj_get_int(items[i]);
     }
 
-    mtbus_master_write_registers(id_int, address_int, n, (uint8_t*)&tmp_value);
+    bittino_master_write_registers(id_int, address_int, n, (uint8_t*)&tmp_value);
 
     return mp_const_none;
 }
