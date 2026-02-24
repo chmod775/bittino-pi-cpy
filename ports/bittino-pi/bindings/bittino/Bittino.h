@@ -10,6 +10,8 @@
 #define BITTINO_DEBUG_PRINT(...) (void) (0)
 #endif
 
+#define BITTINO_PACKET_SIZE     75
+
 typedef struct {
     uint8_t count_relatime_in;
     uint8_t count_relatime_out;

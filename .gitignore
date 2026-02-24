@@ -87,7 +87,7 @@ TAGS
 ####################
 *.mo
 
-.vscode
+#.vscode
 .idea
 
 # Python Virtual Environments
