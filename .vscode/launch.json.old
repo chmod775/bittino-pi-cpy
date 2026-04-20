@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "name": "Cortex Debug",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/ports/raspberrypi/build-raspberry_pi_pico/firmware.elf",
+      "request": "launch",
+      "type": "cortex-debug",
+      "servertype": "openocd",
+      "configFiles": [
+        "interface/cmsis-dap.cfg",
+        "target/rp2040.cfg"
+      ],
+      "searchDir": ["/usr/share/openocd/scripts"],
+      "runToEntryPoint": "main",
+      "postLaunchCommands": [
+        "monitor reset halt",
+        "load",
+        "monitor reset init",
+        "continue"
+      ]
+    }
+  ]
+}

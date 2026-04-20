@@ -1,0 +1,13 @@
+{
+  "configurations": [
+    {
+      "name": "Attach",
+      "request": "attach",
+      "type": "cortex-debug",
+      "servertype": "openocd",
+      "executable": "${workspaceFolder}/ports/tone-pi/build-raspberry_pi_pico/firmware.elf",
+      "configFiles": ["interface/cmsis-dap.cfg", "target/rp2040.cfg"],
+      "searchDir": ["/usr/share/openocd/scripts"]
+    }
+  ]
+}
