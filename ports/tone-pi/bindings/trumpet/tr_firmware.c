@@ -51,22 +51,6 @@ static inline void SP_write_u32(uint32_t sp, uint32_t offset, uint32_t value) { 
 
 VM_TaskInstance vm_task_instances[TASKS_MAX];
 
-
-typedef enum { VM_FUNC_C, VM_FUNC_PY } VM_FuncKind;
-
-typedef struct {
-  VM_FuncKind kind;
-  uint8_t     stack_argc;
-  union {
-    void     (*c_func)(VM_TaskInstance *ti, uint8_t *payload);
-    mp_obj_t  py_callable;
-  };
-  const char *py_module;
-  const char *py_name;
-} VM_FuncEntry;
-
-extern VM_FuncEntry vm_functions[FUNCTIONS_MAX];
-
 static void VM_InitTask(uint8_t task_index, uint32_t PC, uint32_t STACK_PTR) {
   VM_TaskInstance *task_instance = &vm_task_instances[task_index];
   task_instance->PC = PC;
@@ -132,12 +116,24 @@ static bool VM_ExecuteTask_Step(VM_TaskInstance *task_instance)
                           task_instance->PC,                                  \
                           _op,                                                 \
                           task_instance->STACK_PTR))                          \
-          return false; /* task is paused; caller will retry next TR_Step */  \
-      task_instance->PC++;                                                    \
+          return false;                                                        \
+      task_instance->PC++;                                                     \
       goto *dispatch_table[_op] ?: &&op_DEFAULT;                              \
   } while(0)
+ 
+  #define COMPLETE() do {                                         \
+      return false;                                               \
+  } while(0)
 
-  #define COMPLETE() do { return false; } while (0)
+  #define _DBG_FNAME(fn, idx, buf, bufsz)                              \
+      ((fn)->kind == VM_FUNC_PY                                        \
+          ? (snprintf((buf), (bufsz), "%s.%s",                         \
+                      (fn)->py_module ? (fn)->py_module : "?",         \
+                      (fn)->py_name   ? (fn)->py_name   : "?"), (buf)) \
+          : ((fn)->c_name                                               \
+              ? (fn)->c_name                                            \
+              : (snprintf((buf), (bufsz), "c_func#%d", (idx)), (buf))))
+ 
 
   DISPATCH();
 
@@ -193,23 +189,22 @@ op_EXE: {
 op_EXE_ARGS: {
   uint8_t  argc = FETCH8 (task_instance, &task_instance->PC);
   uint16_t idx  = FETCH16(task_instance, &task_instance->PC);
-
   VM_FuncEntry *fn = &vm_functions[idx];
 
+  uint32_t fetched_pc = task_instance->PC;
+  task_instance->PC += argc - 2;
+
   if (fn->kind == VM_FUNC_C) {
-    fn->c_func(task_instance, &vm_code_buffer[task_instance->PC]);
+    fn->c_func(task_instance, &vm_code_buffer[fetched_pc]);
   } else {
     mp_obj_t py_args[fn->stack_argc];
     for (int i = fn->stack_argc - 1; i >= 0; i--)
       py_args[i] = SP_pop(&task_instance->STACK_PTR);
-
     mp_obj_t result = mp_call_function_n_kw(fn->py_callable, fn->stack_argc, 0, py_args);
     if (result != mp_const_none)
       SP_push(&task_instance->STACK_PTR, result);
   }
-
-  task_instance->PC += argc - 2;
-
+  
   COMPLETE();
 }
 
@@ -521,34 +516,34 @@ static void BLOCK_Variable_Create(VM_TaskInstance *task_instance, uint8_t *paylo
 }
 
 VM_FuncEntry vm_functions[FUNCTIONS_MAX] = {
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Comparison_Equal,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Comparison_Greater,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Comparison_Less,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Const_Integer,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Const_String,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Const_TrueFalse,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Const_Value,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Control_If,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Control_IfElse,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Loop_Wait,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Loop_While,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Math_Add,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Math_Divide,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Math_Multiply,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Math_Subtract,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Select_Integer,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Assign,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Concatenate,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Convert,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Create,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_DEBUG,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Length,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_PadStart,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Read,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Substring,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Variable_Assign,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Variable_Create,        NULL,       NULL             },
-	{ VM_FUNC_C,  0, .c_func      = BLOCK_Variable_Read,        NULL,       NULL             }
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Comparison_Equal", .c_func      = BLOCK_Comparison_Equal,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Comparison_Greater", .c_func      = BLOCK_Comparison_Greater,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Comparison_Less", .c_func      = BLOCK_Comparison_Less,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Const_Integer", .c_func      = BLOCK_Const_Integer,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Const_String", .c_func      = BLOCK_Const_String,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Const_TrueFalse", .c_func      = BLOCK_Const_TrueFalse,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Const_Value", .c_func      = BLOCK_Const_Value,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Control_If", .c_func      = BLOCK_Control_If,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Control_IfElse", .c_func      = BLOCK_Control_IfElse,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Loop_Wait", .c_func      = BLOCK_Loop_Wait,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Loop_While", .c_func      = BLOCK_Loop_While,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Math_Add", .c_func      = BLOCK_Math_Add,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Math_Divide", .c_func      = BLOCK_Math_Divide,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Math_Multiply", .c_func      = BLOCK_Math_Multiply,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Math_Subtract", .c_func      = BLOCK_Math_Subtract,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Select_Integer", .c_func      = BLOCK_Select_Integer,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Assign", .c_func      = BLOCK_String_Assign,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Concatenate", .c_func      = BLOCK_String_Concatenate,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Convert", .c_func      = BLOCK_String_Convert,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Create", .c_func      = BLOCK_String_Create,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_DEBUG", .c_func      = BLOCK_String_DEBUG,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Length", .c_func      = BLOCK_String_Length,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_PadStart", .c_func      = BLOCK_String_PadStart,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Read", .c_func      = BLOCK_String_Read,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Substring", .c_func      = BLOCK_String_Substring,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Variable_Assign", .c_func      = BLOCK_Variable_Assign,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Variable_Create", .c_func      = BLOCK_Variable_Create,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Variable_Read", .c_func      = BLOCK_Variable_Read,        NULL,       NULL             }
 //  { VM_FUNC_C,  2, .c_func      = my_c_handler,  NULL,       NULL             },
 //  { VM_FUNC_C,  0, .c_func      = vm_noop,        NULL,       NULL             },
 //  { VM_FUNC_PY, 3, .py_callable = MP_OBJ_NULL,    "mymodule", "my_py_handler"  },

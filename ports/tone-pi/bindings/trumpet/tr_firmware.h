@@ -13,7 +13,6 @@
 #define STACK_SIZE      400
 extern mp_obj_t vm_stack[STACK_SIZE];
 
-#define FUNCTIONS_MAX   28
 
 #define TASKS_MAX       4
 typedef struct {
@@ -83,6 +82,24 @@ enum VM_Status {
   RUNNING,
   STOPPED
 };
+
+#define FUNCTIONS_MAX   28
+typedef enum { VM_FUNC_C, VM_FUNC_PY } VM_FuncKind;
+
+typedef struct {
+  VM_FuncKind kind;
+  uint8_t     stack_argc;
+  union {
+    void     (*c_func)(VM_TaskInstance *ti, uint8_t *payload);
+    mp_obj_t  py_callable;
+  };
+  const char *py_module;
+  const char *py_name;
+  const char *c_name;
+} VM_FuncEntry;
+
+extern VM_FuncEntry vm_functions[FUNCTIONS_MAX];
+
 
 // #define DEBUG
 void TR_Init(void);
