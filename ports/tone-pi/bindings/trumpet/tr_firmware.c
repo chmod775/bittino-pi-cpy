@@ -110,17 +110,25 @@ static bool VM_ExecuteTask_Step(VM_TaskInstance *task_instance)
   dispatch_table[SLOT_RETURN]   = &&op_SLOT_RETURN;
   dispatch_table[POINT_OFFSET]  = &&op_POINT_OFFSET;
 
-  #define DISPATCH() do {                                                      \
-      uint8_t _op = BC8(task_instance->PC);                                   \
-      if (_vm_debug_check(task_instance->ID,                                  \
-                          task_instance->PC,                                  \
-                          _op,                                                 \
-                          task_instance->STACK_PTR))                          \
-          return false;                                                        \
-      task_instance->PC++;                                                     \
-      goto *dispatch_table[_op] ?: &&op_DEFAULT;                              \
-  } while(0)
- 
+  #ifdef DEBUG_TOOLS_ENABLED
+    #define DISPATCH() do {                                     \
+        uint8_t _op = BC8(task_instance->PC);                  \
+        if (_vm_debug_check(task_instance->ID,                  \
+                            task_instance->PC,                  \
+                            _op,                                \
+                            task_instance->STACK_PTR))          \
+            return false;                                       \
+        task_instance->PC++;                                    \
+        goto *dispatch_table[_op] ?: &&op_DEFAULT;             \
+    } while(0)
+  #else
+    #define DISPATCH() do {                                     \
+        uint8_t _op = BC8(task_instance->PC);                  \
+        task_instance->PC++;                                    \
+        goto *dispatch_table[_op] ?: &&op_DEFAULT;             \
+    } while(0)
+  #endif
+
   #define COMPLETE() do {                                         \
       return false;                                               \
   } while(0)
@@ -332,6 +340,58 @@ void port_gc_collect(void) {
 }
 
 
+
+
+/* ##################################################################################### */
+/* ###                             CODE GENERATED USING                              ### */
+/* ###    ______   ______     __  __     __    __     ______   ______     ______     ### */
+/* ###   /\__  _\ /\  == \   /\ \/\ \   /\ "-./  \   /\  == \ /\  ___\   /\__  _\    ### */
+/* ###   \/_/\ \/ \ \  __<   \ \ \_\ \  \ \ \-./\ \  \ \  _-/ \ \  __\   \/_/\ \/    ### */
+/* ###      \ \_\  \ \_\ \_\  \ \_____\  \ \_\ \ \_\  \ \_\    \ \_____\    \ \_\    ### */
+/* ###       \/_/   \/_/ /_/   \/_____/   \/_/  \/_/   \/_/     \/_____/     \/_/    ### */
+/* ###                                                                               ### */
+/* ###   by AlienLogic (Michele Trombetta)                                           ### */
+/* ##################################################################################### */
+/* ###   Built using:                                                                ### */
+/* ###     - TrumpeT v1.0.0 pre                                                      ### */
+/* ###     - VM v1.0.0 pre                                                           ### */   
+/* ###   Usage:                                                                      ### */
+/* ###     - Stack: 84 Bytes                                                         ### */
+/* ###     - Code: 530 Bytes                                                         ### */
+/* ###     - Tasks: 3                                                                ### */
+/* ##################################################################################### */
+/* ###   Libraries:                                                                  ### */
+/* ##################################################################################### */
+
+// ### INC_Pin
+#include "shared-bindings/digitalio/DigitalInOut.h"
+#include "shared-bindings/digitalio/Direction.h"
+#include "shared-bindings/digitalio/Pull.h"
+#include "shared-bindings/pwmio/PWMOut.h"
+#include "shared-bindings/analogio/AnalogIn.h"
+#include "shared-bindings/board/__init__.h"
+
+static const mcu_pin_obj_t *gpio_pin_table[] = {
+    &pin_GPIO0,  &pin_GPIO1,  &pin_GPIO2,  &pin_GPIO3,
+    &pin_GPIO4,  &pin_GPIO5,  &pin_GPIO6,  &pin_GPIO7,
+    &pin_GPIO8,  &pin_GPIO9,  &pin_GPIO10, &pin_GPIO11,
+    &pin_GPIO12, &pin_GPIO13, &pin_GPIO14, &pin_GPIO15,
+    &pin_GPIO16, &pin_GPIO17, &pin_GPIO18, &pin_GPIO19,
+    &pin_GPIO20, &pin_GPIO21, &pin_GPIO22, &pin_GPIO23,
+    &pin_GPIO24, &pin_GPIO25, &pin_GPIO26, &pin_GPIO27,
+    &pin_GPIO28, &pin_GPIO29,
+};
+#define GPIO_PIN_TABLE_SIZE (sizeof(gpio_pin_table) / sizeof(gpio_pin_table[0]))
+ 
+// ### INC_Delay
+#include "py/mphal.h"
+
+static void BLOCK_Event_OnPowerOn(VM_TaskInstance *task_instance, uint8_t *payload) {
+  if (!task_instance->FLAGS.is_first_start) {
+    task_instance->PC = (uint32_t)payload[0] | ((uint32_t)payload[1] << 8) | ((uint32_t)payload[2] << 16) | ((uint32_t)payload[3] << 24);
+  }
+  task_instance->FLAGS.is_first_start = false;
+}
 static void BLOCK_Control_If(VM_TaskInstance *task_instance, uint8_t *payload) {
     bool condition = mp_obj_is_true(SP_pop(&task_instance->STACK_PTR));
     if (!condition)
@@ -514,6 +574,86 @@ static void BLOCK_Variable_Create(VM_TaskInstance *task_instance, uint8_t *paylo
     uint32_t offset      = SP_pop_u32(&task_instance->STACK_PTR);
     SP_write(task_instance->STACK_PTR, offset - 1, val);  // offset - 1 like the original
 }
+// payload: 4 bytes little-endian uint32 — GP pin index (from SELECT.BRD.PINS enum)
+// Stack: dest_offset (u32) — variable slot to write the DigitalInOut object into
+static void BLOCK_Pin_InitOutput(VM_TaskInstance *task_instance, uint8_t *payload) {
+    uint32_t pin_index = (uint32_t)payload[0]
+                       | ((uint32_t)payload[1] << 8)
+                       | ((uint32_t)payload[2] << 16)
+                       | ((uint32_t)payload[3] << 24);
+ 
+    uint32_t dest_offset = SP_pop_u32(&task_instance->STACK_PTR);
+ 
+    if (pin_index >= GPIO_PIN_TABLE_SIZE) {
+        mp_raise_ValueError(MP_ERROR_TEXT("invalid pin index"));
+    }
+ 
+    const mcu_pin_obj_t *pin = gpio_pin_table[pin_index];
+ 
+    digitalio_digitalinout_obj_t *dio = mp_obj_malloc(digitalio_digitalinout_obj_t, &digitalio_digitalinout_type);
+    common_hal_digitalio_digitalinout_construct(dio, pin);
+    common_hal_digitalio_digitalinout_switch_to_output(dio, false, DRIVE_MODE_PUSH_PULL);
+ 
+    SP_write(task_instance->STACK_PTR, dest_offset - 1, MP_OBJ_FROM_PTR(dio));
+}
+// payload: 4 bytes little-endian uint32 — GPIO index
+// Stack: dest_offset (u32) — variable slot to write the DigitalInOut object into
+static void BLOCK_Pin_InitInput(VM_TaskInstance *task_instance, uint8_t *payload) {
+    uint32_t pin_index = (uint32_t)payload[0]
+                       | ((uint32_t)payload[1] << 8)
+                       | ((uint32_t)payload[2] << 16)
+                       | ((uint32_t)payload[3] << 24);
+ 
+    uint32_t dest_offset = SP_pop_u32(&task_instance->STACK_PTR);
+ 
+    if (pin_index >= GPIO_PIN_TABLE_SIZE) {
+        mp_raise_ValueError(MP_ERROR_TEXT("invalid pin index"));
+    }
+ 
+    const mcu_pin_obj_t *pin = gpio_pin_table[pin_index];
+ 
+    digitalio_digitalinout_obj_t *dio = mp_obj_malloc(digitalio_digitalinout_obj_t, &digitalio_digitalinout_type);
+    common_hal_digitalio_digitalinout_construct(dio, pin);
+    common_hal_digitalio_digitalinout_switch_to_input(dio, PULL_NONE);
+ 
+    SP_write(task_instance->STACK_PTR, dest_offset - 1, MP_OBJ_FROM_PTR(dio));
+}
+// payload: none
+// Stack: state (mp_obj_t bool), pin (mp_obj_t DigitalInOut)
+static void BLOCK_Pin_Write(VM_TaskInstance *task_instance, uint8_t *payload) {
+    mp_obj_t state_obj = SP_pop(&task_instance->STACK_PTR);
+    uint32_t offset = SP_pop_u32(&task_instance->STACK_PTR);
+    mp_obj_t pin_obj   = SP_peek(task_instance->STACK_PTR, offset);
+ 
+    digitalio_digitalinout_obj_t *dio = MP_OBJ_TO_PTR(pin_obj);
+    common_hal_digitalio_digitalinout_set_value(dio, mp_obj_is_true(state_obj));
+}
+// payload: none
+// Stack: pin offset (u32)
+// Pushes bool value onto stack
+static void BLOCK_Pin_Read(VM_TaskInstance *task_instance, uint8_t *payload) {
+    uint32_t offset  = SP_pop_u32(&task_instance->STACK_PTR);
+    mp_obj_t pin_obj = SP_peek(task_instance->STACK_PTR, offset);
+ 
+    digitalio_digitalinout_obj_t *dio = MP_OBJ_TO_PTR(pin_obj);
+    bool value = common_hal_digitalio_digitalinout_get_value(dio);
+    SP_push(&task_instance->STACK_PTR, value ? mp_const_true : mp_const_false);
+}
+static void BLOCK_Delay_Wait___Init(VM_TaskInstance *task_instance, uint8_t *payload) {
+    SP_push_u32(&task_instance->STACK_PTR, mp_hal_ticks_ms());
+}
+static void BLOCK_Delay_Wait(VM_TaskInstance *task_instance, uint8_t *payload) {
+    uint32_t amount_ms = (uint32_t)mp_obj_get_float(SP_pop(&task_instance->STACK_PTR));
+    uint32_t start_ms   = SP_peek_u32(task_instance->STACK_PTR, 1);
+
+    uint32_t elapsed = mp_hal_ticks_ms() - start_ms;
+    if (elapsed < amount_ms) {
+        task_instance->PC = (uint32_t)payload[0]
+                          | ((uint32_t)payload[1] << 8)
+                          | ((uint32_t)payload[2] << 16)
+                          | ((uint32_t)payload[3] << 24);
+    }
+}
 
 VM_FuncEntry vm_functions[FUNCTIONS_MAX] = {
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Comparison_Equal", .c_func      = BLOCK_Comparison_Equal,        NULL,       NULL             },
@@ -525,12 +665,19 @@ VM_FuncEntry vm_functions[FUNCTIONS_MAX] = {
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Const_Value", .c_func      = BLOCK_Const_Value,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Control_If", .c_func      = BLOCK_Control_If,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Control_IfElse", .c_func      = BLOCK_Control_IfElse,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Delay_Wait", .c_func      = BLOCK_Delay_Wait,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Delay_Wait___Init", .c_func      = BLOCK_Delay_Wait___Init,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Event_OnPowerOn", .c_func      = BLOCK_Event_OnPowerOn,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Loop_Wait", .c_func      = BLOCK_Loop_Wait,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Loop_While", .c_func      = BLOCK_Loop_While,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Math_Add", .c_func      = BLOCK_Math_Add,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Math_Divide", .c_func      = BLOCK_Math_Divide,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Math_Multiply", .c_func      = BLOCK_Math_Multiply,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Math_Subtract", .c_func      = BLOCK_Math_Subtract,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Pin_InitInput", .c_func      = BLOCK_Pin_InitInput,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Pin_InitOutput", .c_func      = BLOCK_Pin_InitOutput,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Pin_Read", .c_func      = BLOCK_Pin_Read,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_name = "BLOCK_Pin_Write", .c_func      = BLOCK_Pin_Write,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_Select_Integer", .c_func      = BLOCK_Select_Integer,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Assign", .c_func      = BLOCK_String_Assign,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_name = "BLOCK_String_Concatenate", .c_func      = BLOCK_String_Concatenate,        NULL,       NULL             },
@@ -550,13 +697,17 @@ VM_FuncEntry vm_functions[FUNCTIONS_MAX] = {
 };
 
 uint8_t vm_code_buffer[CODE_SIZE] = {
-0x21, 0x03,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x00,0x00, 0x80, 0x19,0x00, 0x21, 0x03,0x00,0x00,0x00, 0x21, 0x04,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x80,0x3F, 0x80, 0x0B,0x00, 0x80, 0x19,0x00, 0x91, 0x04,0x00,0x00,0x00, 0x21, 0x03,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x13, 0x03,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x80, 0x02,0x00, 0x81, 0x06, 0x0A,0x00, 0x10,0x00,0x00,0x00, 0x8F   ,   0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x04,0x00, 0x03,0x61,0x62,0x63, 0x80, 0x13,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x0E, 0x04,0x00, 0x0B,0x48,0x65,0x6C,0x6C,0x6F,0x20,0x57,0x6F,0x72,0x6C,0x64, 0x80, 0x10,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0xC0,0x41,0x44, 0x80, 0x1A,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x13, 0x04,0x00,0x00,0x00, 0x80, 0x17,0x00, 0x81, 0x0B, 0x04,0x00, 0x08,0x54,0x72,0x75,0x6D,0x70,0x65,0x74,0x21, 0x80, 0x11,0x00, 0x80, 0x13,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x80, 0x17,0x00, 0x80, 0x14,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x00,0x00, 0x80, 0x1A,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x13, 0x04,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x7A,0x44, 0x80, 0x0B,0x00, 0x80, 0x19,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x80, 0x12,0x00, 0x80, 0x14,0x00, 0xE8, 0x01,0x00, 0xD0, 0x0B,0x01,0x00,0x00, 0x13, 0x06,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x80, 0x12,0x00, 0x80, 0x14,0x00, 0x9F, 0x90, 0xFC,0x00,0x00,0x00, 0x13, 0x02,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x70,0x41, 0x88, 0x00,0x00,0x00,0x00, 0xA0, 0x04,0x00,0x00,0x00, 0xFF
+0x21, 0x03,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x00,0x00, 0x80, 0x20,0x00, 0x21, 0x03,0x00,0x00,0x00, 0x21, 0x04,0x00,0x00,0x00, 0x80, 0x22,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x80,0x3F, 0x80, 0x0E,0x00, 0x80, 0x20,0x00, 0x91, 0x04,0x00,0x00,0x00, 0x21, 0x03,0x00,0x00,0x00, 0x80, 0x22,0x00, 0x13, 0x03,0x00,0x00,0x00, 0x80, 0x22,0x00, 0x80, 0x02,0x00, 0x81, 0x06, 0x0D,0x00, 0x10,0x00,0x00,0x00, 0x8F   ,   0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x04,0x00, 0x03,0x61,0x62,0x63, 0x80, 0x1A,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x0E, 0x04,0x00, 0x0B,0x48,0x65,0x6C,0x6C,0x6F,0x20,0x57,0x6F,0x72,0x6C,0x64, 0x80, 0x17,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0xC0,0x41,0x44, 0x80, 0x21,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x13, 0x04,0x00,0x00,0x00, 0x80, 0x1E,0x00, 0x81, 0x0B, 0x04,0x00, 0x08,0x54,0x72,0x75,0x6D,0x70,0x65,0x74,0x21, 0x80, 0x18,0x00, 0x80, 0x1A,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x80, 0x1E,0x00, 0x80, 0x1B,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x00,0x00, 0x80, 0x21,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x13, 0x04,0x00,0x00,0x00, 0x80, 0x22,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x7A,0x44, 0x80, 0x0E,0x00, 0x80, 0x20,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x80, 0x22,0x00, 0x80, 0x19,0x00, 0x80, 0x1B,0x00, 0xE8, 0x01,0x00, 0xD0, 0x0B,0x01,0x00,0x00, 0x13, 0x06,0x00,0x00,0x00, 0x80, 0x22,0x00, 0x80, 0x19,0x00, 0x80, 0x1B,0x00, 0x9F, 0x90, 0xFC,0x00,0x00,0x00, 0x13, 0x02,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x70,0x41, 0x88, 0x00,0x00,0x00,0x00, 0xA0, 0x04,0x00,0x00,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x13,0x00, 0x00,0x00,0x00,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x13,0x00, 0x01,0x00,0x00,0x00, 0xFF   ,   0x81, 0x06, 0x0B,0x00, 0x48,0x01,0x00,0x00, 0x13, 0x09,0x00,0x00,0x00, 0x81, 0x06, 0x05,0x00, 0x01,0x00,0x00,0x00, 0x80, 0x15,0x00, 0x80, 0x0A,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0xFA,0x43, 0x81, 0x06, 0x09,0x00, 0x63,0x01,0x00,0x00, 0xE0, 0x13, 0x09,0x00,0x00,0x00, 0x81, 0x06, 0x05,0x00, 0x00,0x00,0x00,0x00, 0x80, 0x15,0x00, 0x80, 0x0A,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0xFA,0x43, 0x81, 0x06, 0x09,0x00, 0x87,0x01,0x00,0x00, 0xE0, 0x81, 0x06, 0x05,0x00, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x0D,0x00, 0x50,0x01,0x00,0x00, 0xD0, 0x48,0x01,0x00,0x00   ,   0x81, 0x06, 0x0B,0x00, 0xAD,0x01,0x00,0x00, 0x13, 0x0A,0x00,0x00,0x00, 0x81, 0x06, 0x05,0x00, 0x01,0x00,0x00,0x00, 0x80, 0x15,0x00, 0x80, 0x0A,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0xFA,0x43, 0x81, 0x06, 0x09,0x00, 0xC8,0x01,0x00,0x00, 0xE0, 0x13, 0x0A,0x00,0x00,0x00, 0x81, 0x06, 0x05,0x00, 0x00,0x00,0x00,0x00, 0x80, 0x15,0x00, 0x80, 0x0A,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0xFA,0x43, 0x81, 0x06, 0x09,0x00, 0xEC,0x01,0x00,0x00, 0xE0, 0x81, 0x06, 0x05,0x00, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x0D,0x00, 0xB5,0x01,0x00,0x00, 0xD0, 0xAD,0x01,0x00,0x00
 };
 
 VM_TaskInitializer vm_task_initializers[TASKS_MAX] = {
-	{ .START_PC = 76, .START_STACK_PTR = 0 }
+	{ .START_PC = 76, .START_STACK_PTR = 0 },
+	{ .START_PC = 328, .START_STACK_PTR = 13 },
+	{ .START_PC = 429, .START_STACK_PTR = 15 }
 };
 
 uint8_t vm_taskcount_setups = 1;
-uint8_t vm_taskcount_events = 0;
+uint8_t vm_taskcount_events = 2;
 uint8_t signature[32] = { 0x00 };
+
+// 21 03 00 00 00 81 06 06 00 00 00 00 00 80 20 00 21 03 00 00 00 21 04 00 00 00 80 22 00 81 06 06 00 00 00 80 3F 80 0E 00 80 20 00 91 04 00 00 00 21 03 00 00 00 80 22 00 13 03 00 00 00 80 22 00 80 02 00 81 06 0D 00 10 00 00 00 8F E8 01 00 13 01 00 00 00 81 06 04 00 03 61 62 63 80 1A 00 13 01 00 00 00 81 0E 04 00 0B 48 65 6C 6C 6F 20 57 6F 72 6C 64 80 17 00 E8 01 00 13 01 00 00 00 81 06 06 00 00 C0 41 44 80 21 00 E8 01 00 13 01 00 00 00 13 04 00 00 00 80 1E 00 81 0B 04 00 08 54 72 75 6D 70 65 74 21 80 18 00 80 1A 00 13 01 00 00 00 80 1E 00 80 1B 00 E8 01 00 13 01 00 00 00 81 06 06 00 00 00 00 00 80 21 00 13 01 00 00 00 13 04 00 00 00 80 22 00 81 06 06 00 00 00 7A 44 80 0E 00 80 20 00 13 01 00 00 00 80 22 00 80 19 00 80 1B 00 E8 01 00 D0 0B 01 00 00 13 06 00 00 00 80 22 00 80 19 00 80 1B 00 9F 90 FC 00 00 00 13 02 00 00 00 81 06 06 00 00 00 70 41 88 00 00 00 00 A0 04 00 00 00 E8 01 00 13 01 00 00 00 81 06 13 00 00 00 00 00 E8 01 00 13 01 00 00 00 81 06 13 00 01 00 00 00 FF 81 06 0B 00 48 01 00 00 13 09 00 00 00 81 06 05 00 01 00 00 00 80 15 00 80 0A 00 81 06 06 00 00 00 FA 43 81 06 09 00 63 01 00 00 E0 13 09 00 00 00 81 06 05 00 00 00 00 00 80 15 00 80 0A 00 81 06 06 00 00 00 FA 43 81 06 09 00 87 01 00 00 E0 81 06 05 00 01 00 00 00 81 06 0D 00 50 01 00 00 D0 48 01 00 00 81 06 0B 00 AD 01 00 00 13 0A 00 00 00 81 06 05 00 01 00 00 00 80 15 00 80 0A 00 81 06 06 00 00 00 FA 43 81 06 09 00 C8 01 00 00 E0 13 0A 00 00 00 81 06 05 00 00 00 00 00 80 15 00 80 0A 00 81 06 06 00 00 00 FA 43 81 06 09 00 EC 01 00 00 E0 81 06 05 00 01 00 00 00 81 06 0D 00 B5 01 00 00 D0 AD 01 00 00'

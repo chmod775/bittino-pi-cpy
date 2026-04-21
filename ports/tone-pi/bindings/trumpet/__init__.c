@@ -15,6 +15,14 @@ static mp_obj_t trumpet_step(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(trumpet_step_obj, trumpet_step);
 
+static mp_obj_t trumpet_run(void) {
+    while (1)
+        TR_Step();
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(trumpet_run_obj, trumpet_run);
+
+
 static mp_obj_t trumpet_load(mp_obj_t hex_str_obj) {
     size_t str_len;
     const char *str = mp_obj_str_get_data(hex_str_obj, &str_len);
@@ -74,6 +82,7 @@ static const mp_rom_map_elem_t trumpet_module_globals_table[] = {
 
     { MP_ROM_QSTR(MP_QSTR_init),  MP_ROM_PTR(&trumpet_init_obj) },
     { MP_ROM_QSTR(MP_QSTR_step),  MP_ROM_PTR(&trumpet_step_obj) },
+    { MP_ROM_QSTR(MP_QSTR_run),  MP_ROM_PTR(&trumpet_run_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(trumpet_module_globals, trumpet_module_globals_table);

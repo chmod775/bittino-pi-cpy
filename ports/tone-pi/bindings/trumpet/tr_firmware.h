@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define DEBUG_TOOLS_ENABLED
+
 #define STACK_SIZE      400
 extern mp_obj_t vm_stack[STACK_SIZE];
 
@@ -83,7 +85,7 @@ enum VM_Status {
   STOPPED
 };
 
-#define FUNCTIONS_MAX   28
+#define FUNCTIONS_MAX   50
 typedef enum { VM_FUNC_C, VM_FUNC_PY } VM_FuncKind;
 
 typedef struct {
