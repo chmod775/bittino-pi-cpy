@@ -13,62 +13,14 @@
 /* ###     - VM v1.0.0 pre                                                           ### */   
 /* ###   Usage:                                                                      ### */
 /* ###     - Stack: 32 Bytes                                                         ### */
-/* ###     - Code: 170 Bytes                                                         ### */
+/* ###     - Code: 169 Bytes                                                         ### */
 /* ###     - Tasks: 1                                                                ### */
 /* ##################################################################################### */
 /* ###   Libraries:                                                                  ### */
 /* ##################################################################################### */
 
 #include "tr_firmware.h"
-
-#define TASKS_MAX       4
-#define STACK_SIZE      400
-#define CODE_SIZE       1000
-#define FUNCTIONS_MAX   27
-
-
-enum VM_Opcodes {
-  NOP = 0x00,
-
-  LITERAL_UINT32 = 0x13,
-
-  READ_ARG = 0x21,
-
-  EXE = 0x80,
-  EXE_ARGS = 0x81,
-
-  MACRO_CALL = 0x88,
-  MACRO_RETURN = 0x8F,
-
-  SLOT_BODY = 0x90,
-  SLOT_CALL = 0x91,
-  SLOT_RETURN = 0x9F,
-
-  GROUP_END = 0xA0,
-
-  POINT_OFFSET = 0xB1,
-
-  GOTO = 0xD0,
-
-  POP = 0xE0,
-  PUSH = 0xE8,
-
-  END = 0xFF
-};
-
-typedef struct
-{
-  unsigned int enabled: 1;
-  unsigned int is_first_start: 1;
-} VM_Task_Flags;
-
-typedef struct {
-  uint16_t ID;
-  uint32_t PC;
-  uint32_t STACK_PTR;
-  VM_Task_Flags FLAGS;
-} VM_TaskInstance;
-
+#include "debug/vm_debug.h"
 
 /* ##### Stack ##### */
 mp_obj_t vm_stack[STACK_SIZE];
@@ -76,11 +28,13 @@ mp_obj_t vm_stack[STACK_SIZE];
 static inline mp_obj_t  SP_pop     (uint32_t *sp)                    { return vm_stack[--(*sp)]; }
 static inline void      SP_push    (uint32_t *sp, mp_obj_t v)        { vm_stack[(*sp)++] = v; }
 static inline mp_obj_t  SP_peek    (uint32_t sp, uint32_t off)       { return vm_stack[sp - off]; }
+static inline void SP_write(uint32_t sp, uint32_t offset, mp_obj_t value) { vm_stack[sp - offset - 1] = value; }
 
 // Raw uint32 — no GC, direct bit cast (PC values, literals, offsets)
 static inline uint32_t  SP_pop_u32 (uint32_t *sp)                    { return (uint32_t)(uintptr_t)vm_stack[--(*sp)]; }
 static inline void      SP_push_u32(uint32_t *sp, uint32_t v)        { vm_stack[(*sp)++] = (mp_obj_t)(uintptr_t)v; }
 static inline uint32_t  SP_peek_u32(uint32_t sp, uint32_t off)       { return (uint32_t)(uintptr_t)vm_stack[sp - off]; }
+static inline void SP_write_u32(uint32_t sp, uint32_t offset, uint32_t value) { vm_stack[sp - offset - 1] = (mp_obj_t)(uintptr_t)value; }
 /* ################## */
 
 /* ##### Arguments helpers ##### */
@@ -97,7 +51,6 @@ static inline uint32_t  SP_peek_u32(uint32_t sp, uint32_t off)       { return (u
 
 VM_TaskInstance vm_task_instances[TASKS_MAX];
 
-extern uint8_t vm_code_buffer[CODE_SIZE];
 
 typedef enum { VM_FUNC_C, VM_FUNC_PY } VM_FuncKind;
 
@@ -173,9 +126,15 @@ static bool VM_ExecuteTask_Step(VM_TaskInstance *task_instance)
   dispatch_table[SLOT_RETURN]   = &&op_SLOT_RETURN;
   dispatch_table[POINT_OFFSET]  = &&op_POINT_OFFSET;
 
-  #define DISPATCH() do {                                       \
-      uint8_t op = BC8(task_instance->PC); task_instance->PC++; \
-      goto *dispatch_table[op] ?: &&op_DEFAULT;                 \
+  #define DISPATCH() do {                                                      \
+      uint8_t _op = BC8(task_instance->PC);                                   \
+      if (_vm_debug_check(task_instance->ID,                                  \
+                          task_instance->PC,                                  \
+                          _op,                                                 \
+                          task_instance->STACK_PTR))                          \
+          return false; /* task is paused; caller will retry next TR_Step */  \
+      task_instance->PC++;                                                    \
+      goto *dispatch_table[_op] ?: &&op_DEFAULT;                              \
   } while(0)
 
   #define COMPLETE() do { return false; } while (0)
@@ -249,7 +208,7 @@ op_EXE_ARGS: {
       SP_push(&task_instance->STACK_PTR, result);
   }
 
-  task_instance->PC += argc;
+  task_instance->PC += argc - 2;
 
   COMPLETE();
 }
@@ -298,29 +257,25 @@ op_POINT_OFFSET: {
   COMPLETE();
 }
 
-op_DEFAULT:
-  while(1);
+op_DEFAULT: {
+  // Unknown opcode — halt and report if debug is on, hard-hang otherwise
+  if (vm_debug.enabled) {
+      uint8_t bad_op = vm_code_buffer[task_instance->PC - 1];
+      mp_printf(MP_PYTHON_PRINTER,
+          "[VM DBG] !! UNKNOWN OPCODE 0x%02X at PC=0x%08lX (task=%u) !!\n",
+          bad_op,
+          (unsigned long)(task_instance->PC - 1),
+          task_instance->ID);
+      // Park the task so inspection is possible from the REPL
+      vm_debug.paused         = true;
+      vm_debug.paused_task_id = task_instance->ID;
+      vm_debug.paused_pc      = task_instance->PC - 1;
+      vm_debug.paused_opcode  = bad_op;
+      return false;
+  }
+  while(1); // original behaviour when debug is off
 }
-
-
-typedef struct {
-  uint32_t START_PC;
-  uint32_t START_STACK_PTR;
-} VM_TaskInitializer;
-extern VM_TaskInitializer vm_task_initializers[TASKS_MAX];
-
-extern uint8_t vm_taskcount_setups;
-extern uint8_t vm_taskcount_events;
-
-extern uint8_t signature[32];
-
-enum VM_Status {
-  IDLE,
-  INITIALIZING,
-  READY,
-  RUNNING,
-  STOPPED
-};
+}
 
 bool run_mode = true;
 enum VM_Status actual_status = IDLE;
@@ -380,6 +335,7 @@ void port_gc_collect(void) {
     gc_collect_root((void **)&vm_stack[0], t->STACK_PTR);
   }
 }
+
 
 static void BLOCK_Control_If(VM_TaskInstance *task_instance, uint8_t *payload) {
     bool condition = mp_obj_is_true(SP_pop(&task_instance->STACK_PTR));
@@ -445,41 +401,36 @@ static void BLOCK_Const_String(VM_TaskInstance *task_instance, uint8_t *payload)
     SP_push(&task_instance->STACK_PTR, mp_obj_new_str((const char *)&payload[1], len));
 }
 
-
 static void BLOCK_String_Assign(VM_TaskInstance *task_instance, uint8_t *payload) {
     mp_obj_t src         = SP_pop(&task_instance->STACK_PTR);
-    uint32_t dest_offset = SP_pop_u32(&task_instance->STACK_PTR);
-    vm_stack[task_instance->STACK_PTR - dest_offset - 1] = src;
+    uint32_t offset      = SP_pop_u32(&task_instance->STACK_PTR);
+    SP_write(task_instance->STACK_PTR, offset - 1, src);
 }
-
-static void BLOCK_String_Concatenate(VM_TaskInstance *task_instance, uint8_t *payload) {
-    mp_obj_t srcB = SP_pop(&task_instance->STACK_PTR);
-    mp_obj_t srcA = SP_pop(&task_instance->STACK_PTR);
-    SP_push(&task_instance->STACK_PTR, mp_binary_op(MP_BINARY_OP_ADD, srcA, srcB));
+static void BLOCK_String_Create(VM_TaskInstance *task_instance, uint8_t *payload) {
+    mp_obj_t src         = SP_pop(&task_instance->STACK_PTR);
+    uint32_t offset      = SP_pop_u32(&task_instance->STACK_PTR);
+    SP_write(task_instance->STACK_PTR, offset - 1, src);
 }
-
+static void BLOCK_String_Read(VM_TaskInstance *task_instance, uint8_t *payload) {
+    uint32_t offset = SP_pop_u32(&task_instance->STACK_PTR);
+    SP_push(&task_instance->STACK_PTR, SP_peek(task_instance->STACK_PTR, offset));
+}
 static void BLOCK_String_Convert(VM_TaskInstance *task_instance, uint8_t *payload) {
     mp_obj_t value = SP_pop(&task_instance->STACK_PTR);
     char buf[24];
     snprintf(buf, sizeof(buf), "%.3f", (double)mp_obj_get_float(value));
     SP_push(&task_instance->STACK_PTR, mp_obj_new_str(buf, strlen(buf)));
 }
+static void BLOCK_String_Concatenate(VM_TaskInstance *task_instance, uint8_t *payload) {
+    mp_obj_t srcB = SP_pop(&task_instance->STACK_PTR);
+    mp_obj_t srcA = SP_pop(&task_instance->STACK_PTR);
+    SP_push(&task_instance->STACK_PTR, mp_binary_op(MP_BINARY_OP_ADD, srcA, srcB));
+}
 
 static void BLOCK_String_Length(VM_TaskInstance *task_instance, uint8_t *payload) {
     mp_obj_t str = SP_pop(&task_instance->STACK_PTR);
     SP_push(&task_instance->STACK_PTR, mp_obj_len(str));
 }
-
-static void BLOCK_String_Substring(VM_TaskInstance *task_instance, uint8_t *payload) {
-    mp_obj_t length_obj = SP_pop(&task_instance->STACK_PTR);
-    mp_obj_t start_obj  = SP_pop(&task_instance->STACK_PTR);
-    mp_obj_t src        = SP_pop(&task_instance->STACK_PTR);
-    mp_int_t start      = mp_obj_get_int(start_obj);
-    mp_int_t length     = mp_obj_get_int(length_obj);
-    mp_obj_t slice      = mp_obj_new_slice(mp_obj_new_int(start), mp_obj_new_int(start + length), MP_OBJ_NULL);
-    SP_push(&task_instance->STACK_PTR, mp_obj_subscr(src, slice, MP_OBJ_SENTINEL));
-}
-
 static void BLOCK_String_PadStart(VM_TaskInstance *task_instance, uint8_t *payload) {
     mp_int_t total_size = (mp_int_t)payload[0];
     mp_obj_t pad_obj    = SP_pop(&task_instance->STACK_PTR);
@@ -496,19 +447,20 @@ static void BLOCK_String_PadStart(VM_TaskInstance *task_instance, uint8_t *paylo
     vstr_add_strn(&vstr, src_str, src_len);
     SP_push(&task_instance->STACK_PTR, mp_obj_new_str_from_vstr(&vstr));
 }
-
-static void BLOCK_String_Read(VM_TaskInstance *task_instance, uint8_t *payload) {
-    uint32_t offset = SP_pop_u32(&task_instance->STACK_PTR);
-    SP_push(&task_instance->STACK_PTR, SP_peek(task_instance->STACK_PTR, offset));
+static void BLOCK_String_Substring(VM_TaskInstance *task_instance, uint8_t *payload) {
+    mp_obj_t length_obj = SP_pop(&task_instance->STACK_PTR);
+    mp_obj_t start_obj  = SP_pop(&task_instance->STACK_PTR);
+    mp_obj_t src        = SP_pop(&task_instance->STACK_PTR);
+    mp_int_t start      = mp_obj_get_int(start_obj);
+    mp_int_t length     = mp_obj_get_int(length_obj);
+    mp_obj_t slice      = mp_obj_new_slice(mp_obj_new_int(start), mp_obj_new_int(start + length), MP_OBJ_NULL);
+    SP_push(&task_instance->STACK_PTR, mp_obj_subscr(src, slice, MP_OBJ_SENTINEL));
 }
-
-static void BLOCK_String_Create(VM_TaskInstance *task_instance, uint8_t *payload) {
-    mp_obj_t src         = SP_pop(&task_instance->STACK_PTR);
-    uint32_t dest_offset = SP_pop_u32(&task_instance->STACK_PTR);
-    vm_stack[task_instance->STACK_PTR - dest_offset - 1] = src;
+static void BLOCK_String_DEBUG(VM_TaskInstance *task_instance, uint8_t *payload) {
+    mp_obj_t val = SP_pop(&task_instance->STACK_PTR);
+    mp_obj_print_helper(&mp_plat_print, val, PRINT_STR);
+    mp_printf(&mp_plat_print, "\n");
 }
-
-
 static void BLOCK_Comparison_Equal(VM_TaskInstance *task_instance, uint8_t *payload) {
     mp_obj_t n1 = SP_pop(&task_instance->STACK_PTR);
     mp_obj_t n2 = SP_pop(&task_instance->STACK_PTR);
@@ -558,17 +510,15 @@ static void BLOCK_Variable_Read(VM_TaskInstance *task_instance, uint8_t *payload
 }
 
 static void BLOCK_Variable_Assign(VM_TaskInstance *task_instance, uint8_t *payload) {
-    mp_obj_t val    = SP_pop(&task_instance->STACK_PTR);
-    uint32_t offset = SP_pop_u32(&task_instance->STACK_PTR);
-    vm_stack[task_instance->STACK_PTR - offset - 1] = val;
+    mp_obj_t val         = SP_pop(&task_instance->STACK_PTR);
+    uint32_t offset      = SP_pop_u32(&task_instance->STACK_PTR);
+    SP_write(task_instance->STACK_PTR, offset - 1, val);
 }
-
 static void BLOCK_Variable_Create(VM_TaskInstance *task_instance, uint8_t *payload) {
-    mp_obj_t val    = SP_pop(&task_instance->STACK_PTR);
-    uint32_t offset = SP_pop_u32(&task_instance->STACK_PTR);
-    vm_stack[task_instance->STACK_PTR - offset - 1] = val;
+    mp_obj_t val         = SP_pop(&task_instance->STACK_PTR);
+    uint32_t offset      = SP_pop_u32(&task_instance->STACK_PTR);
+    SP_write(task_instance->STACK_PTR, offset - 1, val);  // offset - 1 like the original
 }
-
 
 VM_FuncEntry vm_functions[FUNCTIONS_MAX] = {
 	{ VM_FUNC_C,  0, .c_func      = BLOCK_Comparison_Equal,        NULL,       NULL             },
@@ -591,6 +541,7 @@ VM_FuncEntry vm_functions[FUNCTIONS_MAX] = {
 	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Concatenate,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Convert,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Create,        NULL,       NULL             },
+	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_DEBUG,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Length,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_PadStart,        NULL,       NULL             },
 	{ VM_FUNC_C,  0, .c_func      = BLOCK_String_Read,        NULL,       NULL             },
@@ -604,11 +555,11 @@ VM_FuncEntry vm_functions[FUNCTIONS_MAX] = {
 };
 
 uint8_t vm_code_buffer[CODE_SIZE] = {
-0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x04,0x00, 0x03,0x61,0x62,0x63, 0x80, 0x13,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x0E, 0x04,0x00, 0x0B,0x48,0x65,0x6C,0x6C,0x6F,0x20,0x57,0x6F,0x72,0x6C,0x64, 0x80, 0x10,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0xC0,0x41,0x44, 0x80, 0x19,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x13, 0x04,0x00,0x00,0x00, 0x80, 0x16,0x00, 0x81, 0x0B, 0x04,0x00, 0x08,0x54,0x72,0x75,0x6D,0x70,0x65,0x74,0x21, 0x80, 0x11,0x00, 0x80, 0x13,0x00, 0xFF
+0x21, 0x03,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x00,0x00, 0x80, 0x19,0x00, 0x21, 0x03,0x00,0x00,0x00, 0x21, 0x04,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x80,0x3F, 0x80, 0x0B,0x00, 0x80, 0x19,0x00, 0x91, 0x04,0x00,0x00,0x00, 0x21, 0x03,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x13, 0x03,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x80, 0x02,0x00, 0x81, 0x06, 0x0A,0x00, 0x10,0x00,0x00,0x00, 0x8F   ,   0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x04,0x00, 0x03,0x61,0x62,0x63, 0x80, 0x13,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x0E, 0x04,0x00, 0x0B,0x48,0x65,0x6C,0x6C,0x6F,0x20,0x57,0x6F,0x72,0x6C,0x64, 0x80, 0x10,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0xC0,0x41,0x44, 0x80, 0x1A,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x13, 0x04,0x00,0x00,0x00, 0x80, 0x17,0x00, 0x81, 0x0B, 0x04,0x00, 0x08,0x54,0x72,0x75,0x6D,0x70,0x65,0x74,0x21, 0x80, 0x11,0x00, 0x80, 0x13,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x80, 0x17,0x00, 0x80, 0x14,0x00, 0xE8, 0x01,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x00,0x00, 0x80, 0x1A,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x13, 0x04,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x7A,0x44, 0x80, 0x0B,0x00, 0x80, 0x19,0x00, 0x13, 0x01,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x80, 0x12,0x00, 0x80, 0x14,0x00, 0xE8, 0x01,0x00, 0xD0, 0x0B,0x01,0x00,0x00, 0x13, 0x06,0x00,0x00,0x00, 0x80, 0x1B,0x00, 0x80, 0x12,0x00, 0x80, 0x14,0x00, 0x9F, 0x90, 0xFC,0x00,0x00,0x00, 0x13, 0x02,0x00,0x00,0x00, 0x81, 0x06, 0x06,0x00, 0x00,0x00,0x70,0x41, 0x88, 0x00,0x00,0x00,0x00, 0xA0, 0x04,0x00,0x00,0x00, 0xFF
 };
 
 VM_TaskInitializer vm_task_initializers[TASKS_MAX] = {
-	{ .START_PC = 0, .START_STACK_PTR = 0 }
+	{ .START_PC = 76, .START_STACK_PTR = 0 }
 };
 
 uint8_t vm_taskcount_setups = 1;

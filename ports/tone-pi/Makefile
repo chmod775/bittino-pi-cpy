@@ -536,6 +536,8 @@ SRC_C += \
 	boards/$(BOARD)/pins.c \
 	bindings/trumpet/__init__.c \
 	bindings/trumpet/tr_firmware.c \
+	bindings/trumpet/debug/vm_debug_module.c \
+	bindings/trumpet/debug/vm_debug.c \
 	bindings/rp2pio/StateMachine.c \
 	bindings/rp2pio/__init__.c \
 	common-hal/rp2pio/StateMachine.c \
