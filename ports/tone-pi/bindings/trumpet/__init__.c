@@ -1,6 +1,9 @@
 #include "__init__.h"
 #include "bindings/trumpet/tr_firmware.h"
+#include "supervisor/background_callback.h"
+#include <string.h>
 
+static bool trumpet_running = false;
 
 static mp_obj_t trumpet_init(void) {
     TR_Init();
@@ -8,19 +11,36 @@ static mp_obj_t trumpet_init(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(trumpet_init_obj, trumpet_init);
 
+static void _trumpet_step(void) {
+    TR_Step();
+}
 
 static mp_obj_t trumpet_step(void) {
-    TR_Step();
+    _trumpet_step();
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(trumpet_step_obj, trumpet_step);
 
+static background_callback_t trumpet_hid_cb;
+static void _trumpet_tick(void *data) {
+    if (!trumpet_running) {
+        return;  // don't re-queue, VM is stopped
+    }
+    (void)data;
+    _trumpet_step();
+    background_callback_add(&trumpet_hid_cb, _trumpet_tick, NULL);
+}
 static mp_obj_t trumpet_run(void) {
-    while (1)
-        TR_Step();
+    trumpet_running = true;
+    background_callback_add(&trumpet_hid_cb, _trumpet_tick, NULL);
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(trumpet_run_obj, trumpet_run);
+static mp_obj_t trumpet_stop(void) {
+    trumpet_running = false;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(trumpet_stop_obj, trumpet_stop);
 
 
 static mp_obj_t trumpet_load(mp_obj_t hex_str_obj) {
@@ -83,6 +103,7 @@ static const mp_rom_map_elem_t trumpet_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_init),  MP_ROM_PTR(&trumpet_init_obj) },
     { MP_ROM_QSTR(MP_QSTR_step),  MP_ROM_PTR(&trumpet_step_obj) },
     { MP_ROM_QSTR(MP_QSTR_run),  MP_ROM_PTR(&trumpet_run_obj) },
+    { MP_ROM_QSTR(MP_QSTR_stop),  MP_ROM_PTR(&trumpet_stop_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(trumpet_module_globals, trumpet_module_globals_table);
