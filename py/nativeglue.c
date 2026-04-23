@@ -335,8 +335,6 @@ const mp_fun_table_t mp_fun_table = {
     mp_load_method_maybe,
     mp_get_buffer,
     mp_get_stream_raise,
-    // CIRCUITPY-CHANGE: add mp_obj_assert_native_inited
-    mp_obj_assert_native_inited,
     mp_arg_parse_all,
     mp_arg_parse_all_kw_array,
     mp_binary_get_size,
@@ -357,6 +355,9 @@ const mp_fun_table_t mp_fun_table = {
     &mp_stream_readinto_obj,
     &mp_stream_unbuffered_readline_obj,
     &mp_stream_write_obj,
+    // CIRCUITPY-CHANGE: appended at the end to preserve upstream mp_fun_table ABI.
+    // Order must match the mp_fun_table_t struct in nativeglue.h.
+    mp_obj_assert_native_inited,
 };
 
 #elif MICROPY_EMIT_NATIVE && MICROPY_DYNAMIC_COMPILER

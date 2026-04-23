@@ -90,3 +90,5 @@ CIRCUITPY_MESSAGE_COMPRESSION_LEVEL ?= 1
 
 # (ssl is selectively enabled but it's always the mbedtls implementation)
 CIRCUITPY_SSL_MBEDTLS = 1
+
+CIRCUITPY_ENABLE_MPY_NATIVE = 1

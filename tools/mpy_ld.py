@@ -50,9 +50,13 @@ MP_NATIVE_ARCH_XTENSA = 9
 MP_NATIVE_ARCH_XTENSAWIN = 10
 MP_NATIVE_ARCH_RV32IMC = 11
 MP_PERSISTENT_OBJ_STR = 5
-MP_SCOPE_FLAG_VIPERRELOC = 0x10
-MP_SCOPE_FLAG_VIPERRODATA = 0x20
-MP_SCOPE_FLAG_VIPERBSS = 0x40
+# CIRCUITPY-COMPAT: CircuitPython inserted MP_SCOPE_FLAG_ASYNC at bit 0x10
+# (see circuitpython/py/runtime0.h), shifting these three viper flags up by
+# one bit compared to upstream MicroPython. This tool only produces .mpy
+# files for CircuitPython firmware; do not use it with upstream MicroPython.
+MP_SCOPE_FLAG_VIPERRELOC = 0x20
+MP_SCOPE_FLAG_VIPERRODATA = 0x40
+MP_SCOPE_FLAG_VIPERBSS = 0x80
 MP_SMALL_INT_BITS = 31
 MP_FUN_TABLE_MP_TYPE_TYPE_OFFSET = 73
 

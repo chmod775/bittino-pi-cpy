@@ -158,8 +158,6 @@ typedef struct _mp_fun_table_t {
     void (*load_method_maybe)(mp_obj_t base, qstr attr, mp_obj_t *dest);
     bool (*get_buffer)(mp_obj_t obj, mp_buffer_info_t *bufinfo, mp_uint_t flags);
     const mp_stream_p_t *(*get_stream_raise)(mp_obj_t self_in, int flags);
-    // CIRCUITPY-CHANGE
-    void (*assert_native_inited)(mp_obj_t native_object);
     void (*arg_parse_all)(size_t n_pos, const mp_obj_t *pos, mp_map_t *kws, size_t n_allowed, const mp_arg_t *allowed, mp_arg_val_t *out_vals);
     void (*arg_parse_all_kw_array)(size_t n_pos, size_t n_kw, const mp_obj_t *args, size_t n_allowed, const mp_arg_t *allowed, mp_arg_val_t *out_vals);
     size_t (*binary_get_size)(char struct_type, char val_type, size_t *palign);
@@ -182,6 +180,11 @@ typedef struct _mp_fun_table_t {
     const mp_obj_fun_builtin_var_t *stream_readinto_obj;
     const mp_obj_fun_builtin_var_t *stream_unbuffered_readline_obj;
     const mp_obj_fun_builtin_var_t *stream_write_obj;
+    // CIRCUITPY-CHANGE: appended at the end to preserve upstream mp_fun_table ABI.
+    // Slots 0..86 must match upstream MicroPython so that tools/mpy_ld.py can link
+    // native .mpy files against this firmware without a CircuitPython-specific tool.
+    // This field is CircuitPython-only and is not reachable from upstream-produced .mpy files.
+    void (*assert_native_inited)(mp_obj_t native_object);
 } mp_fun_table_t;
 
 #if (MICROPY_EMIT_NATIVE && !MICROPY_DYNAMIC_COMPILER) || MICROPY_ENABLE_DYNRUNTIME
